@@ -1,6 +1,8 @@
 /* ============================================================
-   TL Editor — frontend logic
-   Cloudflare Pages (static) -> Cloudflare Worker (/api)
+   TL Editor — frontend logic (Ocrku-style compact 2-tab)
+   Sunting tab: input + run bar + results (inline)
+   Pengaturan tab: provider, keys, model, prompt, security
+   Cloudflare Pages (static) -> Pages Function -> Worker
    Security: AES-GCM + PBKDF2 encrypted key vault, memory-only
    plaintext, per-provider multi-key, HTTPS-only. No key logging.
    ============================================================ */
@@ -28,46 +30,44 @@ function toast(msg, kind = '') {
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2600);
 }
 
-/* ---------- provider catalog (curated; Load Models can refresh) ---------- */
+/* ---------- provider catalog ---------- */
 const PROVIDERS = {
   gemini: {
-    label: 'Gemini', icon: '✦', tag: 'Gemini 3.8 Flash',
+    label: 'Gemini', icon: 'G', tag: 'Gemini 3.8 Flash',
     keyLabel: 'Gemini API Key', multiKey: true,
     models: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-live', 'gemini-3.8-flash-lite-tts'],
-    keyHint: 'Mulai dengan AIza… (bukan model Gemini 2 / 2.5 — sudah discontinued)',
+    keyHint: 'Mulai dengan AIza…',
     keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
   },
   sumopod: {
-    label: 'Sumopod', icon: '∑', tag: 'ai.sumopod.com',
+    label: 'Sumopod', icon: 'S', tag: 'ai.sumopod.com',
     keyLabel: 'Sumopod API Key', multiKey: true,
     models: ['gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet', 'deepseek-chat'],
-    keyHint: 'Base https://ai.sumopod.com/v1 (OpenAI-compatible)',
+    keyHint: 'Base https://ai.sumopod.com/v1',
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   agnes: {
     label: 'Agnes AI', icon: 'A', tag: 'apihub.agnes-ai.com',
     keyLabel: 'Agnes API Key', multiKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-1.5-flash'],
-    keyHint: 'Base https://apihub.agnes-ai.com/v1 (OpenAI-compatible)',
+    keyHint: 'Base https://apihub.agnes-ai.com/v1',
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   cloudflare: {
-    label: 'Cloudflare', icon: '▣', tag: 'Workers AI (binding / BYOK)',
+    label: 'Cloudflare', icon: 'CF', tag: 'Workers AI',
     keyLabel: 'Cloudflare API Token', multiKey: true, needsAccount: true,
-    // Daftar model teks gratis (termasuk dalam kuota 10k neuron/hari Workers AI).
-    // ID terkini diambil dari katalog live CF; klik "Load Models" untuk daftar hidup.
     models: [
-      '@cf/meta/llama-3.3-70b-instruct-fp8-fast', // flagship, andal untuk editing
-      '@cf/aisingapore/gemma-sea-lion-v4-27b-it', // SEA-tuned, paling cocok untuk Bahasa Indonesia
-      '@cf/qwen/qwen3.8-27b',                     // multilingual kuat
-      '@cf/meta/llama-4-scout-17b-16e-instruct',  // cepat (MoE), konteks 131K
-      '@cf/meta/llama-3.1-8b-instruct-fp8',       // hemat neuron, paling ringan
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
+      '@cf/qwen/qwen3.8-27b',
+      '@cf/meta/llama-4-scout-17b-16e-instruct',
+      '@cf/meta/llama-3.1-8b-instruct-fp8',
     ],
-    keyHint: 'Gratis (10k neuron/hari). Kosongkan Account ID = pakai [ai] binding server; atau isi Account ID + API Token untuk BYOK. Model besar (70B/32B) memakai neuron lebih banyak.',
+    keyHint: 'Gratis (10k neuron/hari). Kosongkan Account ID = pakai [ai] binding.',
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   custom: {
-    label: 'Custom', icon: '⚙', tag: 'OpenAI-compatible',
+    label: 'Custom', icon: 'C', tag: 'OpenAI-compatible',
     keyLabel: 'API Key', multiKey: true, needsUrl: true,
     models: [],
     keyHint: 'Isi Base URL + model. Format OpenAI (default) atau Gemini.',
@@ -79,20 +79,20 @@ const PROVIDER_IDS = Object.keys(PROVIDERS);
 /* ---------- state ---------- */
 const state = {
   provider: 'gemini',
-  keys: { gemini: [], sumopod: [], agnes: [], cloudflare: [], custom: [] }, // {id,value,shown}
-  models: {},          // provider -> selected model id
+  keys: { gemini: [], sumopod: [], agnes: [], cloudflare: [], custom: [] },
+  models: {},
   temperature: 0.2,
   maxTokens: 8192,
   cloudflare: { accountId: '' },
   custom: { baseUrl: '', format: 'openai' },
   settings: { workerUrl: '', gatewaySecret: '' },
-  storageMode: 'device',   // device | session
+  storageMode: 'device',
   unlocked: false,
   systemPrompt: '',
   lastResult: null,
   lastRun: null,
 };
-let _aesKey = null;   // in-memory AES-GCM key (device mode, unlocked)
+let _aesKey = null;
 const KEY_IDS = {};
 let KEY_SEQ = 0;
 const nextKey = (p) => (KEY_IDS[p] = (KEY_IDS[p] || 0) + 1, KEY_SEQ++, 'k' + KEY_SEQ);
@@ -148,7 +148,6 @@ function applyVaultPayload(p) {
   if (p.custom) state.custom = p.custom;
   if (p.settings) state.settings = p.settings;
 }
-
 async function createVault(passphrase) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   _aesKey = await deriveAesKey(passphrase, salt);
@@ -168,18 +167,27 @@ async function unlockVault(passphrase) {
   await persistVault();
 }
 
-/* ---------- provider config UI ---------- */
-const TILE_CODE = { gemini: 'G', sumopod: 'S', agnes: 'A', cloudflare: 'CF', custom: 'C' };
+/* ---------- tab switching ---------- */
+function switchView(name) {
+  $$('.view').forEach(v => v.classList.add('hidden'));
+  const target = document.getElementById('view-' + name);
+  if (target) target.classList.remove('hidden');
+  $$('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+}
+$$('.tab-item').forEach(t => t.onclick = () => switchView(t.dataset.view));
+$('#btnToSettings').onclick = () => switchView('pengaturan');
+$('#btnBackSunting').onclick = () => switchView('sunting');
+
+/* ---------- provider tiles ---------- */
 function renderProviderTiles() {
   const wrap = $('#providerTiles'); wrap.innerHTML = '';
   PROVIDER_IDS.forEach(id => {
     const p = PROVIDERS[id];
     const active = state.provider === id;
     const b = el('button', { class: 'ptile' + (active ? ' active' : ''), title: p.keyHint },
-      el('span', { class: 'pico' }, TILE_CODE[id]),
+      el('span', { class: 'pico' }, p.icon),
       el('span', { class: 'pname' }, p.label),
       el('span', { class: 'ptag' }, p.tag),
-      active ? el('span', { class: 'ptag-on' }, 'AKTIF') : null,
     );
     b.onclick = () => selectProvider(id);
     wrap.append(b);
@@ -199,22 +207,18 @@ function syncProviderUI() {
   $('#cfAccountId').value = state.cloudflare.accountId;
   $('#customBaseUrl').value = state.custom.baseUrl;
   $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
+  $('#provKeyLabel').textContent = p.label;
+  $('#runProviderLabel').textContent = p.label;
   $('#keyEncryptionNote').textContent = p.keyLabel + ' • terenkripsi (AES-GCM), hanya di perangkat.';
-  updateRunSummary();
 }
+
+/* ---------- model select ---------- */
 function renderModelSelect() {
   const p = PROVIDERS[state.provider];
   const dl = $('#modelOptions'); dl.innerHTML = '';
   (p.models || []).forEach(m => dl.append(el('option', { value: m }, m)));
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
   $('#modelInput').value = state.models[state.provider];
-  updateRunSummary();
-}
-function updateRunSummary() {
-  const p = PROVIDERS[state.provider];
-  const pc = $('#providerChip'); if (pc) pc.textContent = p.label;
-  const mc = $('#modelChip');
-  if (mc) { const m = state.models[state.provider] || ''; mc.textContent = m ? (m.length > 34 ? m.slice(0, 32) + '…' : m) : '—'; }
 }
 
 /* ---------- keys UI ---------- */
@@ -224,16 +228,16 @@ function renderKeys() {
   const p = PROVIDERS[state.provider];
   $('#keyCount').textContent = keys.filter(k => k.value).length + ' aktif';
   if (state.storageMode === 'device' && !state.unlocked && localStorage.getItem('tl.vault.data')) {
-    const b = el('button', { class: 'ghost-btn', style: 'width:100%;padding:8px' }, 'Terkunci — ' + keys.length + ' kunci tersimpan terenkripsi. Buka kunci.');
-    b.onclick = () => { showView('security'); setTimeout(() => $('#unlockPass').focus(), 50); };
-    list.append(el('div', { class: 'key-item' }, el('span', { class: 'kdot' }), el('span', { class: 'kname' }, ''), b));
+    const b = el('button', { class: 'ghost-btn', style: 'width:100%;padding:8px' }, 'Terkunci — ' + keys.length + ' kunci tersimpan. Buka kunci di bawah.');
+    b.onclick = () => { switchView('pengaturan'); setTimeout(() => $('#unlockPass').focus(), 60); };
+    list.append(el('div', { class: 'key-item' }, el('span', { class: 'kdot' }), b));
     updateSecChecklist();
     return;
   }
   if (keys.length === 0) {
     const msg = state.provider === 'cloudflare'
       ? 'Kosongkan = pakai [ai] binding server (tanpa kunci). Atau tambah token untuk BYOK.'
-      : 'Belum ada kunci untuk ' + p.label + '. Klik “+ Tambah kunci”.';
+      : 'Belum ada kunci untuk ' + p.label + '. Klik "+ Tambah kunci".';
     list.append(el('div', { class: 'muted', style: 'padding:4px' }, msg));
     updateSecChecklist();
     return;
@@ -282,7 +286,7 @@ async function apiCall(path, body, method = 'POST') {
   try {
     res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch (e) {
-    throw new Error('Tidak bisa menjangkau Worker. Periksa URL Worker / koneksi. (' + e.message + ')');
+    throw new Error('Tidak bisa menjangkau Worker. (' + e.message + ')');
   }
   let data; try { data = await res.json(); } catch { data = { ok: false, code: 'BAD_RESPONSE', message: 'Respon bukan JSON' }; }
   if (!res.ok) { const e = new Error(data.message || ('HTTP ' + res.status)); e.code = data.code; e.status = res.status; throw e; }
@@ -291,8 +295,8 @@ async function apiCall(path, body, method = 'POST') {
 
 $('#btnPingAll').onclick = async () => {
   const keys = state.keys[state.provider].map(k => k.value).filter(Boolean);
-  if (!keys.length) return toast('Tambahkan key dulu.', 'err');
-  const box = $('#pingResults'); box.classList.remove('hidden'); box.innerHTML = '<div class="muted">Menguji ' + keys.length + ' key…</div>';
+  if (!keys.length && state.provider !== 'cloudflare') return toast('Tambahkan key dulu.', 'err');
+  const box = $('#pingResults'); box.classList.remove('hidden'); box.innerHTML = '<div class="muted">Menguji ' + Math.max(1, keys.length) + ' key…</div>';
   try {
     const body = { provider: state.provider, model: PROVIDERS[state.provider].models[0] || '', keys };
     if (state.provider === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
@@ -312,7 +316,7 @@ function checkWorkerStatus() {
     $('#workerStatusText').textContent = 'Worker online' + (h.gatewayProtected ? ' • ter-proteksi' : '');
   }).catch(() => {
     const c = $('#workerStatusChip'); c.className = 'chip chip-status err';
-    $('#workerStatusText').textContent = 'Worker belum tercapai';
+    $('#workerStatusText').textContent = 'Worker offline';
   });
 }
 
@@ -329,14 +333,16 @@ function updateSourceStats() {
 }
 function updateLineNumbers() {
   const on = $('#lineNumbers').checked;
-  const g = $('#lineGutter'); g.parentElement;
-  if (!on) { g.innerHTML = ''; g.style.visibility = 'hidden'; return; }
+  const g = $('#lineGutter');
+  if (!on || $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab !== 'paste') {
+    g.style.visibility = 'hidden'; g.innerHTML = ''; return;
+  }
   g.style.visibility = 'visible';
   const n = $('#txtPaste').value.split('\n').length;
   let s = ''; for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0');
   g.textContent = s;
 }
-['input'].forEach(ev => { $('#txtPaste').addEventListener(ev, updateSourceStats); });
+$('#txtPaste').addEventListener('input', updateSourceStats);
 $('#lineNumbers').onchange = updateLineNumbers;
 $('#txtPaste').addEventListener('scroll', () => { $('#lineGutter').scrollTop = $('#txtPaste').scrollTop; });
 
@@ -344,13 +350,13 @@ function normalizeText(t) {
   return t
     .replace(/\r\n?/g, '\n')
     .replace(/[\t ]+$/gm, '')
-    .replace(/\n{4,}/g, '\n\n\n')          // cap huge blank gaps
-    .replace(/[ \t]+(\n)/g, '$1');          // trim trailing spaces before newline
+    .replace(/\n{4,}/g, '\n\n\n')
+    .replace(/[ \t]+(\n)/g, '$1');
 }
-$('#btnNormalize').onclick = () => { const t = normalizeText($('#txtPaste').value); $('#txtPaste').value = t; updateSourceStats(); toast('Dinormalisasi (baris kosong & spasi berlebih dirapikan, konten tidak diubah)'); };
+$('#btnNormalize').onclick = () => { const t = normalizeText($('#txtPaste').value); $('#txtPaste').value = t; updateSourceStats(); toast('Dinormalisasi', 'ok'); };
 $('#btnClearSource').onclick = () => { $('#txtPaste').value = ''; $('#txtSource').value = ''; updateSourceStats(); };
 $('#btnSample').onclick = async () => {
-  try { const r = await fetch('prompts/SAMPLE_CH121.txt'); $('#txtPaste').value = await r.text(); updateSourceStats(); toast('Contoh naskah dimuat'); }
+  try { const r = await fetch('prompts/SAMPLE_CH121.txt'); $('#txtPaste').value = await r.text(); updateSourceStats(); toast('Contoh naskah dimuat', 'ok'); }
   catch { toast('Gagal memuat contoh', 'err'); }
 };
 
@@ -360,7 +366,7 @@ $$('[data-srctab]').forEach(b => b.onclick = () => {
   const mode = b.dataset.srctab;
   $('#txtPaste').classList.toggle('hidden', mode === 'source');
   $('#txtSource').classList.toggle('hidden', mode !== 'source');
-  $('#uploadHint').classList.toggle('hidden', mode === 'paste');
+  $('#uploadHint').classList.toggle('hidden', mode !== 'upload');
   $('#lineGutter').style.visibility = (mode === 'paste' && $('#lineNumbers').checked) ? 'visible' : 'hidden';
   if (mode === 'paste') updateSourceStats();
 });
@@ -369,9 +375,10 @@ $('#fileInput').onchange = async (e) => {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
   const txt = await files[0].text();
-  const isSource = $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab === 'source';
-  if (isSource) $('#txtSource').value = txt; else { $('#txtPaste').value = txt; updateSourceStats(); }
-  toast('File "' + files[0].name + '" dimuat (' + files[0].size.toLocaleString() + ' bytes)');
+  const activeSrc = $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab;
+  if (activeSrc === 'source') { $('#txtSource').value = txt; }
+  else { $('#txtPaste').value = txt; updateSourceStats(); }
+  toast('File "' + files[0].name + '" dimuat (' + files[0].size.toLocaleString() + ' bytes)', 'ok');
 };
 // drag & drop
 const srcArea = $('#srcArea');
@@ -379,7 +386,11 @@ const srcArea = $('#srcArea');
 srcArea.addEventListener('drop', async e => {
   const f = e.dataTransfer.files?.[0]; if (!f) return;
   if (!/\.txt$|text\/plain/i.test(f.name)) return toast('Hanya file .txt', 'err');
-  const txt = await f.text(); $('#txtPaste').value = txt; updateSourceStats(); toast('Drag-in: ' + f.name);
+  const txt = await f.text();
+  const activeSrc = $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab;
+  if (activeSrc === 'source') { $('#txtSource').value = txt; }
+  else { $('#txtPaste').value = txt; updateSourceStats(); }
+  toast('Dimuat: ' + f.name, 'ok');
 });
 
 /* ---------- model loading ---------- */
@@ -397,33 +408,30 @@ $('#btnLoadModels').onclick = async () => {
     const r = await apiCall(qs, null, 'GET');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, '0 model via API. Gunakan daftar bawaan (input di atas) atau ketik manual.'))); return; }
+    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, '0 model via API. Gunakan daftar bawaan atau ketik manual.'))); return; }
     models.slice(0, 100).forEach(m => {
-      const row = el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || ''));
-      row.onclick = () => { state.models[p] = m.id; $('#modelInput').value = m.id; $$('#modelList .model-opt').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); updateRunSummary(); autoSave(); };
+      const row = el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') },
+        el('span', { class: 'mid' }, m.id),
+        el('span', { class: 'mdisp' }, m.displayName || ''));
+      row.onclick = () => { state.models[p] = m.id; $('#modelInput').value = m.id; $$('#modelList .model-opt').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); autoSave(); };
       panel.append(row);
     });
   } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
 };
-$('#modelInput').oninput = () => { state.models[state.provider] = $('#modelInput').value.trim(); updateRunSummary(); };
+$('#modelInput').oninput = () => { state.models[state.provider] = $('#modelInput').value.trim(); };
 
-function applyParams() {
-  const tv = state.temperature.toFixed(2), mv = Number(state.maxTokens).toLocaleString('en-US');
-  ['editorTempVal', 'tempVal'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = tv; });
-  ['editorMaxTokVal', 'maxTokVal'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = mv; });
-  const tP = $('#temperature'), tE = $('#editorTemperature');
-  if (tP) tP.value = state.temperature; if (tE) tE.value = state.temperature;
-  const mP = $('#maxTokens'), mE = $('#editorMaxTokens');
-  if (mP) mP.value = state.maxTokens; if (mE) mE.value = state.maxTokens;
-}
-$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; applyParams(); };
-$('#editorTemperature').oninput = () => { state.temperature = +$('#editorTemperature').value; applyParams(); };
-$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; applyParams(); };
-$('#editorMaxTokens').oninput = () => { state.maxTokens = +$('#editorMaxTokens').value; applyParams(); };
-$$('.preset').forEach(b => b.onclick = () => { state.maxTokens = +b.dataset.max; applyParams(); autoSave(); });
+/* ---------- params ---------- */
+$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
+$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; };
 $('#cfAccountId').oninput = () => { state.cloudflare.accountId = $('#cfAccountId').value.trim(); autoSave(); };
 $('#customBaseUrl').oninput = () => { state.custom.baseUrl = $('#customBaseUrl').value.trim(); autoSave(); };
 $$('#customFormatTabs [data-cf]').forEach(b => b.onclick = () => { state.custom.format = b.dataset.cf; syncProviderUI(); autoSave(); });
+
+function applyParams() {
+  $('#temperature').value = state.temperature;
+  $('#tempVal').textContent = state.temperature.toFixed(2);
+  $('#maxTokens').value = state.maxTokens;
+}
 
 /* ---------- system prompt ---------- */
 async function loadDefaultPrompt() {
@@ -438,7 +446,7 @@ $('#btnTogglePrompt').onclick = () => {
   $('#promptSummary').classList.toggle('hidden', !open);
 };
 $('#btnReloadPrompt').onclick = loadDefaultPrompt;
-$('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt di-reset ke bawaan'); };
+$('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt di-reset ke bawaan', 'ok'); };
 
 /* ---------- run ---------- */
 async function runEditor() {
@@ -453,9 +461,7 @@ async function runEditor() {
   if (!text.trim()) return toast('File terjemahan kosong', 'err');
 
   const btn = $('#btnRun'); btn.disabled = true;
-  $('#runTimer').classList.remove('hidden'); $('#runTimer').textContent = 'Diproses…';
   const t0 = performance.now();
-  let tick; tick = setInterval(() => { $('#runTimer').textContent = 'Diproses… ' + ((performance.now() - t0) / 1000).toFixed(1) + 's'; }, 100);
   try {
     const body = {
       provider: p, model, keys,
@@ -467,14 +473,14 @@ async function runEditor() {
     if (p === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/edit', body);
-    state.lastResult = r.raw; state.lastRun = { provider: p, model, ms: Math.round(performance.now() - t0), usage: r.usage, keyUsed: r.keyUsed, keyCount: r.keyCount };
+    state.lastResult = r.raw;
+    state.lastRun = { provider: p, model, ms: Math.round(performance.now() - t0), usage: r.usage, keyUsed: r.keyUsed, keyCount: r.keyCount };
     renderResults(r.raw, state.lastRun);
-    showView('results');
-    toast('Selesai. ' + state.lastRun.keyCount + ' key, dipakai #' + (r.keyUsed + 1), 'ok');
+    toast('Selesai (' + state.lastRun.ms + ' ms)', 'ok');
   } catch (e) {
     toast('Gagal: ' + (e.message || e), 'err');
   } finally {
-    clearInterval(tick); btn.disabled = false; $('#runTimer').classList.add('hidden');
+    btn.disabled = false;
     autoSave();
   }
 }
@@ -484,11 +490,11 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- result parsing ---------- */
-function parseEntries(sectionText, labelsSet) {
+function parseEntries(sectionText) {
   const lines = (sectionText || '').split('\n');
   const entries = []; let cur = null;
   const locRe = /^\s*\[([^\[\]]+)\]\s*$/;
-  const labelRe = new RegExp('^(sebelum|sesudah|alasan|teks|masalah|saran)\\s*:\\s*(.*)$', 'i');
+  const labelRe = /^(sebelum|sesudah|alasan|teks|masalah|saran)\s*:\s*(.*)$/i;
   const singleLabels = new Set(['sebelum', 'sesudah', 'alasan', 'teks', 'masalah', 'saran']);
   for (const raw of lines) {
     const loc = raw.match(locRe);
@@ -507,21 +513,18 @@ function parseEntries(sectionText, labelsSet) {
 
 function splitSections(raw) {
   const s = String(raw || '').replace(/\r\n/g, '\n');
-  const i2 = s.search(/BAGIAN\s*2/);
-  const i3 = s.search(/BAGIAN\s*3/);
-  const i1 = s.search(/BAGIAN\s*1/);
+  const i2 = s.search(/BAGIAN\s*2/i);
+  const i3 = s.search(/BAGIAN\s*3/i);
+  const i1 = s.search(/BAGIAN\s*1/i);
   const startHasil = i1 >= 0 ? i1 : 0;
   const hasilSec = s.slice(startHasil, i2 >= 0 ? i2 : s.length);
   const perubSec = i2 >= 0 ? s.slice(i2, i3 >= 0 ? i3 : s.length) : '';
   const dicekSec = i3 >= 0 ? s.slice(i3) : '';
-  // extract HASIL content: prefer fenced block
   let hasilText = '';
   const fence = hasilSec.match(/```[^\n]*\n?([\s\S]*?)```/);
   if (fence) hasilText = fence[1].replace(/\s+$/, '');
   else {
-    // strip the "BAGIAN 1 — HASIL" heading line and instructional prose before the file
     hasilText = hasilSec.replace(/^.*?BAGIAN\s*1[^\n]*\n/i, '');
-    // if it still starts with instruction-like text, drop leading lines until first plausible file marker
     hasilText = hasilText.replace(/^\s*\n/, '');
   }
   return { hasilText, perubSec, dicekSec };
@@ -531,71 +534,67 @@ function renderResults(raw, run) {
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
   // HASIL
   const hasChanges = !!hasilText;
-  $('#resultHasil code').outerHTML = '<code>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
+  const pre = $('#resultHasil');
+  pre.innerHTML = '<code>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
   $('#cntHasil').textContent = hasChanges ? hasilText.split('\n').length : 0;
-  $('#hasilNote').textContent = hasChanges ? '' : 'Tiga bagian tidak dikenali. Lihat tab “Raw” untuk output mentah.';
+  $('#hasilNote').textContent = hasChanges ? '' : 'Tiga bagian tidak dikenali. Lihat tab Raw.';
   // PERUBAHAN
-  let perub = parseEntries(perubSec, null).filter(e => e.loc);
+  let perub = parseEntries(perubSec).filter(e => e.loc);
   const perubEmpty = /tidak ada perubahan/i.test(perubSec);
   renderCards($('#resultPerubahan'), perub, perubEmpty, 'perubahan');
   $('#cntPerubahan').textContent = perubEmpty ? 0 : perub.length;
   // PERLU DICEK
-  let dicek = parseEntries(dicekSec, null).filter(e => e.loc);
+  let dicek = parseEntries(dicekSec).filter(e => e.loc);
   const dicekEmpty = /tidak ada/i.test(dicekSec.trim()) && dicekSec.trim().length < 40;
   renderCards($('#resultDicek'), dicek, dicekEmpty, 'dicek');
   $('#cntDicek').textContent = dicekEmpty ? 0 : dicek.length;
   // RAW
   $('#resultRaw').textContent = raw || '';
-  $('#cntRaw').textContent = raw ? raw.split('\n').length : 0;
-  // meta
-  $('#runMeta').innerHTML = '';
-  const m = $('#runMeta');
+  $('#cntRaw').textContent = raw ? raw.split('\n').length : '—';
+  // META
+  const m = $('#runMeta'); m.innerHTML = '';
   m.append(
-    tag('Provider: ' + run.provider + ' · ' + run.model),
-    tag(run.ms + ' ms'),
-    tag('Key dipakai #' + (run.keyUsed + 1) + ' / ' + run.keyCount),
-    run.usage ? tag('tok in ' + (run.usage.promptTokenCount || run.usage.promptTokens || run.usage.prompt_tokens || '–')
+    mkTag('Provider: ' + run.provider + ' · ' + run.model),
+    mkTag(run.ms + ' ms'),
+    run.keyCount > 0 ? mkTag('Key #' + (run.keyUsed + 1) + '/' + run.keyCount) : mkTag('[ai] binding'),
+    run.usage ? mkTag('tok in ' + (run.usage.promptTokenCount || run.usage.promptTokens || run.usage.prompt_tokens || '–')
       + ' · out ' + (run.usage.candidatesTokenCount || run.usage.outputTokens || run.usage.completionTokens || run.usage.completion_tokens || '–')) : null,
   );
   window._hasilText = hasilText; window._rawAll = raw;
 }
-function tag(t) { const s = el('span', { class: 'tag' }, t); return s; }
+function mkTag(t) { return el('span', { class: 'tag' }, t); }
 
 function renderCards(container, entries, isEmpty, kind) {
   container.innerHTML = '';
   if (isEmpty) { container.append(el('div', { class: 'empty' }, kind === 'dicek' ? 'Tidak ada bagian yang perlu dicek.' : 'Tidak ada perubahan.')); return; }
-  if (!entries.length) { container.append(el('div', { class: 'empty' }, 'Format bagian tidak dikenali — lihat tab “Raw”.')); return; }
+  if (!entries.length) { container.append(el('div', { class: 'empty' }, 'Format bagian tidak dikenali — lihat tab Raw.')); return; }
   entries.forEach(e => {
     if (kind === 'perubahan') {
-      const c = el('div', { class: 'ccard' },
+      container.append(el('div', { class: 'ccard' },
         el('div', { class: 'loc' }, '[' + e.loc + ']'),
         e.before ? el('div', {}, el('div', { class: 'lbl' }, 'Sebelum'), el('div', { class: 'before' }, e.before)) : null,
         e.after ? el('div', {}, el('div', { class: 'lbl' }, 'Sesudah'), el('div', { class: 'after' }, e.after)) : null,
         e.reason ? el('div', { class: 'reason' }, 'Alasan: ' + e.reason) : null,
-      );
-      container.append(c);
+      ));
     } else {
-      const c = el('div', { class: 'ccard warn' },
+      container.append(el('div', { class: 'ccard warn' },
         el('div', { class: 'loc' }, '[' + e.loc + ']'),
         e.teks ? el('div', {}, el('div', { class: 'lbl' }, 'Teks'), el('div', { class: 'body-text' }, e.teks)) : null,
         e.masalah ? el('div', {}, el('div', { class: 'lbl' }, 'Masalah'), el('div', { class: 'reason' }, e.masalah)) : null,
         e.saran ? el('div', {}, el('div', { class: 'lbl' }, 'Saran'), el('div', { class: 'reason' }, e.saran)) : null,
-      );
-      container.append(c);
+      ));
     }
   });
 }
 function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 function highlightResult(text) {
-  // Highlight changed lines vs the original source (heuristic, index-aligned).
   const show = $('#diffMode').checked;
   const src = $('#txtPaste').value.split('\n');
   const lines = text.split('\n');
   let html = '';
   lines.forEach((ln, i) => {
     const changed = show && (i >= src.length || src[i] !== ln);
-    const safe = escapeHtml(ln);
-    html += '<span class="ln' + (changed ? ' changed' : '') + '">' + (safe || ' ') + '</span>';
+    html += '<span class="ln' + (changed ? ' changed' : '') + '">' + (escapeHtml(ln) || ' ') + '</span>';
   });
   return html;
 }
@@ -604,33 +603,23 @@ function highlightResult(text) {
 $('#btnCopyResult').onclick = async () => {
   const txt = window._hasilText || state.lastResult;
   if (!txt) return toast('Belum ada hasil', 'err');
-  try { await navigator.clipboard.writeText(txt); toast('Hasil disalin ke clipboard', 'ok'); }
+  try { await navigator.clipboard.writeText(txt); toast('Hasil disalin', 'ok'); }
   catch { window.prompt('Salin manual:', txt); }
 };
-function download(name, text, mime = 'text/plain') {
-  const blob = new Blob([text], { type: mime + ';charset=utf-8' });
+function download(name, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 $('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
-$('#btnDownloadAll').onclick = () => { if (state.lastResult) download('hasil-3-bagian.txt', state.lastResult); };
-$$('[data-res]').forEach(b => b.onclick = () => showResTab(b.dataset.res));
+
+/* result sub-tabs */
+$$('.res-tab').forEach(b => b.onclick = () => showResTab(b.dataset.res));
 function showResTab(name) {
   $$('.res-tab').forEach(x => x.classList.toggle('active', x.dataset.res === name));
   $$('.res-pane').forEach(x => x.classList.toggle('hidden', x.dataset.res !== name));
 }
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
-
-/* ---------- views / rail ---------- */
-function showView(name) {
-  $$('.view').forEach(v => v.classList.add('hidden'));
-  const map = { editor: 'view-editor', results: 'view-results', provider: 'view-provider', guide: 'view-guide', security: 'view-security' };
-  const t = document.getElementById(map[name]); if (t) t.classList.remove('hidden');
-  $$('.rail-item').forEach(r => r.classList.toggle('active', r.dataset.view === name));
-}
-$$('.rail-item').forEach(r => r.onclick = () => showView(r.dataset.view));
-const _btnToProvider = $('#btnToProvider'); if (_btnToProvider) _btnToProvider.onclick = () => showView('provider');
-$('#diffMode').checked = false;
 
 /* ---------- settings modal ---------- */
 $('#btnSettings').onclick = () => {
@@ -644,15 +633,15 @@ $('#modalSave').onclick = () => {
   if (wu && !/^https?:\/\//.test(wu)) { wu = 'https://' + wu.replace(/^\/+/, ''); }
   state.settings.workerUrl = wu.replace(/\/$/, '');
   state.settings.gatewaySecret = $('#gatewaySecretInput').value.trim();
-  autoSave(); $('#modal').classList.add('hidden'); checkWorkerStatus(); toast('Pengaturan disimpan', 'ok');
+  autoSave(); $('#modal').classList.add('hidden'); checkWorkerStatus(); toast('Pengaturan koneksi disimpan', 'ok');
 };
 $('#btnCheckConn').onclick = async () => {
   state.settings.workerUrl = $('#workerUrl').value.trim().replace(/\/$/, '');
   state.settings.gatewaySecret = $('#gatewaySecretInput').value.trim();
-  try { await apiCall('/api/health'); toast('Koneksi ke Worker berhasil ✔', 'ok'); } catch (e) { toast('Gagal: ' + e.message, 'err'); }
+  try { await apiCall('/api/health'); toast('Koneksi ke Worker berhasil', 'ok'); } catch (e) { toast('Gagal: ' + e.message, 'err'); }
 };
 
-/* ---------- security view ---------- */
+/* ---------- security ---------- */
 function updateSecChecklist() {
   const items = [
     ['HTTPS-only', /https:/.test(location.protocol)],
@@ -660,23 +649,21 @@ function updateSecChecklist() {
     ['Vault terenkripsi (AES-GCM + PBKDF2)', state.storageMode === 'device' ? state.unlocked : false],
     ['Plaintext hanya di memori', true],
     ['Gateway Secret dipakai', !!state.settings.gatewaySecret],
-    ['Worker tercapai', true],
   ];
   const ul = $('#secChecklist'); ul.innerHTML = '';
-  items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '✓ ' : '○ ') + label)));
-  $('#vaultState').textContent = state.storageMode === 'device' ? (state.unlocked ? 'dibuka' : 'terkunci') : (sessionStorage.getItem('tl.session') ? 'hanya sesi' : 'tidak disimpan');
+  items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '\u2713 ' : '\u25cb ') + label)));
+  $('#vaultState').textContent = state.storageMode === 'device' ? (state.unlocked ? 'dibuka' : 'terkunci') : 'hanya sesi';
 }
 $('#btnLock').onclick = () => {
   _aesKey = null;
   for (const p of PROVIDER_IDS) state.keys[p].forEach(k => { k.value = ''; k.shown = false; });
-  // keep encrypted vault on disk (device mode); clear session plaintext
   sessionStorage.removeItem('tl.session');
   state.unlocked = false;
-  renderKeys(); updateSecChecklist(); showView('security');
-  toast('Key dikunci. Buka lagi lewat panel Keamanan.');
+  renderKeys(); updateSecChecklist();
+  toast('Key dikunci dari memori');
 };
 $('#btnWipeVault').onclick = () => {
-  if (!confirm('Hapus SEMUA API key dan kunci vault?')) return;
+  if (!confirm('Hapus SEMUA API key dan vault?')) return;
   localStorage.removeItem('tl.vault.data'); localStorage.removeItem('tl.vault.meta');
   sessionStorage.removeItem('tl.session');
   for (const p of PROVIDER_IDS) state.keys[p] = [];
@@ -686,7 +673,11 @@ $('#btnWipeVault').onclick = () => {
 $$('#storageMode [data-mode]').forEach(b => b.onclick = () => {
   $$('#storageMode [data-mode]').forEach(x => x.classList.remove('active')); b.classList.add('active');
   state.storageMode = b.dataset.mode;
-  if (state.storageMode === 'session') { sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload())); localStorage.removeItem('tl.vault.data'); localStorage.removeItem('tl.vault.meta'); _aesKey = null; }
+  if (state.storageMode === 'session') {
+    sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
+    localStorage.removeItem('tl.vault.data'); localStorage.removeItem('tl.vault.meta');
+    _aesKey = null;
+  }
   updateSecChecklist();
 });
 $('#btnUnlock').onclick = async () => {
@@ -698,17 +689,16 @@ $('#btnRotateSecret').onclick = () => {
   if (v != null) { state.settings.gatewaySecret = v.trim(); autoSave(); updateSecChecklist(); toast('Secret diperbarui'); }
 };
 
-/* ---------- first-use passphrase prompt ---------- */
+/* ---------- first-use passphrase ---------- */
 async function maybePromptPass() {
-  if (state.unlocked || state.storageMode === 'session' && sessionStorage.getItem('tl.session')) return;
-  // choose mode
+  if (state.unlocked) return;
+  if (state.storageMode === 'session' && sessionStorage.getItem('tl.session')) return;
   const useSession = confirm('Simpan API key di perangkat ini?\n\nOK = terenkripsi (AES-GCM, passphrase, localStorage)\nBatal = hanya sesi ini (jangan simpan ke browser)');
   if (useSession) {
     state.storageMode = 'session'; state.unlocked = true;
     sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
     return;
   }
-  // device: need passphrase
   await new Promise(res => { $('#passModal').classList.remove('hidden'); $('#passModal')._res = res; });
   const p1 = $('#pass1').value, p2 = $('#pass2').value;
   if (p1.length < 8) { toast('Passphrase minimal 8 karakter', 'err'); $('#passModal').classList.remove('hidden'); return; }
@@ -738,16 +728,15 @@ $('#passSkip').onclick = () => {
   applyParams();
   updateSourceStats();
   updatePromptMeta();
-  showView('editor');
+  switchView('sunting');
   updateSecChecklist();
   checkWorkerStatus();
 
-  // load persisted state
+  // restore persisted state
   const meta = localStorage.getItem('tl.vault.meta');
   if (meta) {
     state.storageMode = 'device';
-    $('#vaultUnlockWrap').classList.remove('hidden');
-    $('#storageMode [data-mode="device"]').classList.add('active');
+    $$('#storageMode [data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'device'));
     $('#unlockPass').focus();
   } else {
     const sess = sessionStorage.getItem('tl.session');
@@ -755,9 +744,9 @@ $('#passSkip').onclick = () => {
       state.storageMode = 'session'; state.unlocked = true;
       applyVaultPayload(JSON.parse(sess));
       $$('#storageMode [data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'session'));
+      renderKeys(); renderModelSelect(); syncProviderUI(); applyParams();
     }
   }
-  if (state.storageMode === 'session') { renderKeys(); renderModelSelect(); syncProviderUI(); }
   loadDefaultPrompt();
 })();
 })();

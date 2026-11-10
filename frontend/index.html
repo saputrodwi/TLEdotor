@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TL Editor — Penyunting Hasil Terjemahan</title>
+  <title>TL Editor</title>
   <meta name="color-scheme" content="dark" />
-  <meta name="description" content="Penyunting hasil terjemahan komik / manhua / light novel bahasa Indonesia, ditenagai AI. Istilah Inggris dipertahankan." />
+  <meta name="description" content="Penyunting hasil terjemahan komik / light novel bahasa Indonesia, ditenagai AI. Istilah Inggris dipertahankan." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -13,223 +13,92 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- ===== HEADER ===== -->
-  <header class="app-bar">
-    <div class="bar-left">
-      <div class="mark" aria-hidden="true"><span class="mark-icon">TL</span><span class="ping"></span></div>
-      <div class="brand">
-        <span class="brand-title">TL Editor</span>
-        <span class="brand-sub">Penyunting hasil terjemahan &bull; Komik &amp; Light Novel</span>
-      </div>
-    </div>
-    <div class="bar-right">
-      <div class="chip chip-status" id="workerStatusChip" title="Status koneksi ke Worker">
-        <span class="dot"></span><span id="workerStatusText">Memuat&hellip;</span>
-      </div>
-      <button class="icon-btn" id="btnSettings" title="Pengaturan &amp; koneksi" aria-label="Pengaturan">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-      <button class="icon-btn" id="btnLock" title="Kunci / hapus key dari memori" aria-label="Kunci">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  <!-- HEADER (slim) -->
+  <header class="topbar">
+    <div class="brand"><span class="mark">TL</span><b>TL Editor</b></div>
+    <div class="topbar-right">
+      <div class="chip chip-status" id="workerStatusChip"><span class="dot"></span><span id="workerStatusText">Memuat…</span></div>
+      <button class="icon-btn" id="btnSettings" title="Koneksi &amp; secret" aria-label="Koneksi">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-2.75 1.15V21a2 2 0 0 1-4 0v-.09A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.09A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 9 4.6 1.6 1.6 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.6 1.6 0 0 0 1 1.51 1.6 1.6 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 19.4 9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.09a1.6 1.6 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
   </header>
 
-  <div class="workspace">
-    <!-- ===== LEFT RAIL ===== -->
-    <aside class="rail">
-      <button class="rail-item active" data-view="editor" title="Editor">
-        <svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        <span class="rail-label">Editor</span>
-      </button>
-      <button class="rail-item" data-view="results" title="Hasil">
-        <svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
-        <span class="rail-label">Hasil</span>
-      </button>
-      <button class="rail-item" data-view="provider" title="Provider">
-        <svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
-        <span class="rail-label">Provider</span>
-      </button>
-      <button class="rail-item" data-view="guide" title="Panduan">
-        <svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M4 17h15"/></svg>
-        <span class="rail-label">Panduan</span>
-      </button>
-      <div class="rail-spacer"></div>
-      <button class="rail-item" data-view="security" title="Keamanan">
-        <svg class="ico" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>
-        <span class="rail-label">Keamanan</span>
-      </button>
-    </aside>
+  <!-- TOP TABS (Ocrku-style: input + run, config tucked away) -->
+  <nav class="tabbar" role="tablist">
+    <button class="tab-item active" data-view="sunting">Sunting</button>
+    <button class="tab-item" data-view="pengaturan">Pengaturan</button>
+  </nav>
 
-    <!-- ===== MAIN ===== -->
-    <main class="main">
-      <!-- VIEW: EDITOR (compact) -->
-      <section id="view-editor" class="view">
-        <div class="split">
-          <!-- LEFT: source file -->
-          <div class="panel source-panel">
-            <div class="panel-head">
-              <div class="panel-title"><span class="panel-ico">&lt;/&gt;</span><h2>File Terjemahan</h2><span class="mini-badge" id="sourceMeta">—</span></div>
-              <div class="seg-tabs" role="tablist">
-                <button class="seg-tab active" data-srctab="paste">Tempel</button>
-                <button class="seg-tab" data-srctab="upload">Unggah</button>
-                <button class="seg-tab" data-srctab="source">Sumber</button>
-              </div>
-            </div>
-            <div class="src-tools">
-              <button class="ghost-btn" id="btnSample">Contoh Naskah</button>
-              <button class="ghost-btn" id="btnNormalize">Normalisasi</button>
-              <button class="ghost-btn" id="btnClearSource">Bersihkan</button>
-              <label class="check"><input type="checkbox" id="lineNumbers" checked /><span>Baris</span></label>
-            </div>
-            <div class="src-area" id="srcArea">
-              <div class="linegutter" id="lineGutter"></div>
-              <div>
-                <textarea id="txtPaste" class="src-textarea" spellcheck="false" placeholder="Tempel file hasil terjemahan di sini&hellip;"></textarea>
-                <input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden />
-                <div id="uploadHint" class="hidden">
-                  <button class="ghost-btn" id="btnChooseFile">Pilih file .txt</button>
-                  <span class="muted">atau seret &amp; lepas ke sini</span>
-                </div>
-                <textarea id="txtSource" class="src-textarea hidden" spellcheck="false" placeholder="Teks sumber (opsional, untuk referensi makna)&hellip;"></textarea>
-              </div>
-            </div>
-            <div class="src-status">
-              <span class="stat" id="statLines">0 baris</span>
-              <span class="stat" id="statPages">0 halaman</span>
-              <span class="stat" id="statChars">0 karakter</span>
-              <span class="stat accent" id="statTokens">~0 token</span>
-            </div>
+  <!-- ============ SUNTING ============ -->
+  <main class="wrap">
+    <section id="view-sunting" class="view">
+      <!-- input -->
+      <div class="card src-card">
+        <div class="src-head">
+          <div class="seg-tabs" role="tablist">
+            <button class="seg-tab active" data-srctab="paste">Tempel</button>
+            <button class="seg-tab" data-srctab="upload">Unggah</button>
+            <button class="seg-tab" data-srctab="source">Sumber</button>
           </div>
-
-          <!-- RIGHT: compact run card -->
-          <div class="panel run-panel">
-            <div class="card">
-              <div class="card-head"><h3>Jalankan</h3><button class="link-btn" id="btnToProvider">Kelola Provider &rarr;</button></div>
-              <div class="run-summary">
-                <span class="chip-mini" id="providerChip">—</span>
-                <span class="chip-mini mono" id="modelChip">—</span>
-              </div>
-              <div class="run-params">
-                <div class="rp">
-                  <div class="rp-top"><span>Temperature</span><output id="editorTempVal">0.2</output></div>
-                  <input id="editorTemperature" type="range" min="0" max="1.5" step="0.05" value="0.2" />
-                </div>
-                <div class="rp">
-                  <div class="rp-top"><span>Max tokens</span><output id="editorMaxTokVal">8192</output></div>
-                  <input id="editorMaxTokens" type="number" class="mono" value="8192" min="256" max="32768" step="256" />
-                </div>
-              </div>
-              <button class="btn-primary run" id="btnRun">Jalankan</button>
-              <div class="run-hint"><span><kbd>Ctrl</kbd> / <kbd>&#8984;</kbd> + Enter</span><span id="runTimer" class="hidden"></span></div>
-            </div>
-
-            <div class="card">
-              <div class="card-head"><h3>System Prompt</h3><button class="ghost-btn tiny" id="btnTogglePrompt">Perinci</button></div>
-              <div class="prompt-summary" id="promptSummary">
-                Menyunting hasil terjemahan (bukan menerjemahkan ulang): prioritas makna &rarr; typo &rarr; naturalitas &rarr; efisiensi;
-                pertahankan struktur file, istilah Inggris &amp; kata ganti; output 3 bagian (Hasil, Perubahan, Perlu Dicek).
-              </div>
-              <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10"></textarea>
-              <div class="prompt-tools">
-                <button class="ghost-btn tiny" id="btnReloadPrompt">Muat ulang</button>
-                <button class="ghost-btn tiny" id="btnResetPrompt">Reset</button>
-                <span class="muted" id="promptChars"></span>
-              </div>
-            </div>
+          <div class="src-tools">
+            <button class="ghost-btn" id="btnSample">Contoh</button>
+            <button class="ghost-btn" id="btnNormalize">Rapi</button>
+            <button class="ghost-btn" id="btnClearSource">Bersihkan</button>
+            <label class="check"><input type="checkbox" id="lineNumbers" checked /><span>Baris</span></label>
           </div>
         </div>
-      </section>
-
-      <!-- VIEW: PROVIDER (dedicated menu) -->
-      <section id="view-provider" class="view hidden">
-        <div class="narrow">
-          <div class="view-head"><h2>Provider &amp; Model</h2><span class="muted">Pilih provider, kelola kunci, pilih model &amp; parameter.</span></div>
-
-          <div class="card">
-            <div class="card-head"><h3>Provider</h3><span class="mini-badge">load balancing</span></div>
-            <div id="providerTiles" class="provider-tiles"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><h3>Kunci API</h3><span class="mini-badge" id="keyCount">0 aktif</span></div>
-            <div id="kunciList" class="key-list"></div>
-            <div class="key-actions">
-              <button class="ghost-btn" id="btnAddKey">+ Tambah kunci</button>
-              <button class="ghost-btn" id="btnPingAll">Uji koneksi</button>
-            </div>
-            <div id="pingResults" class="ping-results hidden"></div>
-
-            <div id="cfAccountWrap" class="hidden">
-              <label class="field-label">Cloudflare Account ID (opsional)</label>
-              <input id="cfAccountId" class="input" placeholder="kosongkan = pakai [ai] binding server" autocomplete="off" spellcheck="false" />
-              <p class="hint">Kosongkan untuk memakai <code>[ai]</code> binding di Worker (tanpa token). Isi untuk BYOK per-user.</p>
-            </div>
-
-            <div id="customWrap" class="hidden">
-              <label class="field-label">Base URL (OpenAI-compatible, HTTPS)</label>
-              <input id="customBaseUrl" class="input" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
-              <label class="field-label">Format API</label>
-              <div class="seg-tabs" id="customFormatTabs">
-                <button class="seg-tab" data-cf="openai">OpenAI</button>
-                <button class="seg-tab" data-cf="gemini">Gemini</button>
-              </div>
-            </div>
-            <p class="sec-note" id="keyEncryptionNote">Tersimpan terenkripsi (AES-GCM + PBKDF2), hanya di perangkat.</p>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><h3>Model</h3><button class="ghost-btn" id="btnLoadModels">Muat model</button></div>
-            <div class="model-controls">
-              <input id="modelInput" class="input model-input" list="modelOptions" placeholder="pilih / ketik model" autocomplete="off" spellcheck="false" />
-              <datalist id="modelOptions"></datalist>
-            </div>
-            <div id="modelList" class="model-list"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><h3>Parameter</h3><span class="muted">tersimpan otomatis</span></div>
-            <div class="params">
-              <div class="param">
-                <div class="param-top"><span>Temperature</span><output id="tempVal">0.2</output></div>
-                <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" />
-                <p class="hint">Rendah = konsisten; tinggi = kreatif.</p>
-              </div>
-              <div class="param">
-                <div class="param-top"><span>Max output tokens</span><output id="maxTokVal">8192</output></div>
-                <div class="preset-row">
-                  <button class="preset" data-max="2048">2K</button>
-                  <button class="preset" data-max="8192">8K</button>
-                  <button class="preset" data-max="16384">16K</button>
-                  <button class="preset" data-max="32768">32K</button>
-                </div>
-                <input id="maxTokens" type="number" class="input mono" value="8192" min="256" max="32768" step="256" />
-              </div>
-            </div>
+        <div class="src-area" id="srcArea">
+          <div class="linegutter" id="lineGutter"></div>
+          <div class="src-body">
+            <textarea id="txtPaste" class="src-textarea" spellcheck="false" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
+            <input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden />
+            <div id="uploadHint" class="hidden"><button class="ghost-btn" id="btnChooseFile">Pilih file .txt</button><span class="muted">atau seret &amp; lepas</span></div>
+            <textarea id="txtSource" class="src-textarea hidden" spellcheck="false" placeholder="Teks sumber (opsional, referensi makna)…"></textarea>
           </div>
         </div>
-      </section>
+        <div class="src-status">
+          <span class="stat" id="statLines">0 baris</span>
+          <span class="stat" id="statPages">0 halaman</span>
+          <span class="stat" id="statChars">0 karakter</span>
+          <span class="stat accent" id="statTokens">~0 token</span>
+        </div>
+      </div>
 
-      <!-- VIEW: RESULTS -->
-      <section id="view-results" class="view hidden">
-        <div class="results-head">
-          <div><h2>Hasil Penyuntingan</h2><div class="run-meta" id="runMeta"><span class="muted">Belum ada hasil. Jalankan dulu.</span></div></div>
-          <div class="results-actions">
-            <button class="ghost-btn" id="btnCopyResult">Salin .txt</button>
-            <button class="ghost-btn" id="btnDownloadResult">Unduh .txt</button>
-            <button class="ghost-btn" id="btnDownloadAll">Unduh 3 bagian</button>
+      <!-- run bar -->
+      <div class="card runbar">
+        <div class="rb-line">
+          <span class="rb-lbl">Provider</span><b id="runProviderLabel" class="rb-val">Gemini</b>
+          <button class="link-btn" id="btnToSettings">ubah →</button>
+          <div class="rb-model">
+            <input id="modelInput" class="input model-input" list="modelOptions" placeholder="pilih / ketik model" autocomplete="off" spellcheck="false" />
+            <button class="ghost-btn tiny" id="btnLoadModels">Muat</button>
+            <datalist id="modelOptions"></datalist>
           </div>
         </div>
+        <div class="model-list" id="modelList"></div>
+        <div class="rb-line">
+          <div class="rp-mini"><span>Temp</span><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" /><output id="tempVal">0.2</output></div>
+          <div class="rp-mini"><span>Tokens</span><input id="maxTokens" type="number" class="mono" value="8192" min="256" max="32768" step="256" /></div>
+          <button id="btnRun" class="btn-primary run">Jalankan</button>
+          <span class="muted rb-hint"><kbd>Ctrl</kbd>+<Enter></span>
+        </div>
+      </div>
+
+      <!-- results (compact, inline) -->
+      <div class="card results">
         <div class="res-tabs">
-          <button class="res-tab active" data-res="hasil"><span>Hasil</span><em id="cntHasil">0</em></button>
-          <button class="res-tab" data-res="perubahan"><span>Perubahan</span><em id="cntPerubahan">0</em></button>
-          <button class="res-tab warn" data-res="dicek"><span>Perlu Dicek</span><em id="cntDicek">0</em></button>
-          <button class="res-tab" data-res="raw"><span>Raw</span><em id="cntRaw">—</em></button>
+          <button class="res-tab active" data-res="hasil">Hasil <em id="cntHasil">0</em></button>
+          <button class="res-tab" data-res="perubahan">Perubahan <em id="cntPerubahan">0</em></button>
+          <button class="res-tab warn" data-res="dicek">Perlu dicek <em id="cntDicek">0</em></button>
+          <button class="res-tab" data-res="raw">Raw <em id="cntRaw">—</em></button>
         </div>
         <div class="res-body">
           <div class="res-pane" data-res="hasil">
-            <div class="res-pane-tools">
-              <label class="check"><input type="checkbox" id="diffMode" /><span>Tonjolkan baris berubah</span></label>
+            <div class="res-actions">
+              <label class="check"><input type="checkbox" id="diffMode" /><span>diff</span></label>
+              <button class="ghost-btn tiny" id="btnCopyResult">Salin</button>
+              <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
               <span class="muted" id="hasilNote"></span>
             </div>
             <pre class="mono-output" id="resultHasil"><code>Belum ada hasil.</code></pre>
@@ -238,83 +107,97 @@
           <div class="res-pane hidden" data-res="dicek"><div id="resultDicek" class="cards"><div class="empty">Belum ada hasil.</div></div></div>
           <div class="res-pane hidden" data-res="raw"><pre class="mono-output"><code id="resultRaw">Belum ada hasil.</code></pre></div>
         </div>
-      </section>
+        <div class="run-meta" id="runMeta"></div>
+      </div>
+    </section>
 
-      <!-- VIEW: GUIDE -->
-      <section id="view-guide" class="view hidden">
-        <div class="narrow">
-          <div class="card wide guide-body">
-            <h2>Panduan Singkat</h2>
-            <ol>
-              <li>Tempel / unggah file hasil terjemahan (.txt) di panel <strong>Editor</strong>. Opsional: tempel teks sumber untuk referensi makna.</li>
-              <li>Buka menu <strong>Provider</strong>: pilih provider, tambahkan kunci (multi-kunci = load balancing), lalu pilih model.</li>
-              <li>Kembali ke <strong>Editor</strong> dan klik <strong>Jalankan</strong>.</li>
-              <li>Hasil muncul di tab <strong>Hasil / Perubahan / Perlu Dicek</strong>. Salin atau unduh .txt.</li>
-            </ol>
-            <p class="muted">Instruksi deploy &amp; keamanan ada di <code>GUIDE.md</code> di repo.</p>
-          </div>
+    <!-- ============ PENGATURAN ============ -->
+    <section id="view-pengaturan" class="view hidden">
+      <div class="card">
+        <div class="card-head"><h3>Provider</h3><button class="ghost-btn tiny" id="btnBackSunting">← Sunting</button></div>
+        <div id="providerTiles" class="provider-tiles"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Kunci &amp; Model</h3><span class="mini-badge" id="keyCount">0 aktif</span></div>
+        <div class="field-label" style="margin-top:0">API key — <b id="provKeyLabel">Gemini</b></div>
+        <div class="key-actions"><button class="ghost-btn" id="btnAddKey">+ Tambah kunci</button><button class="ghost-btn" id="btnPingAll">Tes koneksi</button></div>
+        <div id="kunciList" class="key-list"></div>
+        <div id="pingResults" class="ping-results hidden"></div>
+
+        <div id="cfAccountWrap" class="hidden">
+          <label class="field-label">Cloudflare Account ID (opsional)</label>
+          <input id="cfAccountId" class="input" placeholder="kosongkan = pakai [ai] binding" autocomplete="off" spellcheck="false" />
+          <p class="hint">Kosongkan untuk memakai <code>[ai]</code> binding Worker (tanpa token).</p>
         </div>
-      </section>
-
-      <!-- VIEW: SECURITY -->
-      <section id="view-security" class="view hidden">
-        <div class="narrow">
-          <div class="card wide">
-            <div class="card-head"><h3>Keamanan Kunci</h3><span class="mini-badge" id="vaultState">belum dibuka</span></div>
-            <p class="muted">Kunci disimpan <strong>terenkripsi AES-GCM</strong> di perangkat, di-kunci passphrase (PBKDF2). Plaintext hanya di memori selama sesi.</p>
-            <div class="sec-field">
-              <label class="field-label">Mode Penyimpanan</label>
-              <div class="seg-tabs" id="storageMode">
-                <button class="seg-tab active" data-mode="device">Perangkat (enkripsi)</button>
-                <button class="seg-tab" data-mode="session">Hanya sesi</button>
-              </div>
-            </div>
-            <div id="vaultUnlockWrap">
-              <label class="field-label">Passphrase</label>
-              <div class="pass-row">
-                <input id="unlockPass" class="input" type="password" autocomplete="off" placeholder="passphrase&hellip;" />
-                <button class="ghost-btn" id="btnUnlock">Buka Kunci</button>
-              </div>
-            </div>
-            <div class="sec-tools">
-              <button class="ghost-btn" id="btnRotateSecret">Ubah Gateway Secret</button>
-              <button class="ghost-btn danger" id="btnWipeVault">Hapus Semua Kunci</button>
-            </div>
-            <div class="sec-checklist"><h4>Pemeriksaan yang Aktif</h4><ul id="secChecklist"></ul></div>
-          </div>
+        <div id="customWrap" class="hidden">
+          <label class="field-label">Base URL (OpenAI-compatible, HTTPS)</label>
+          <input id="customBaseUrl" class="input" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
+          <div class="seg-tabs" id="customFormatTabs"><button class="seg-tab" data-cf="openai">OpenAI</button><button class="seg-tab" data-cf="gemini">Gemini</button></div>
         </div>
-      </section>
-    </main>
-  </div>
+        <p class="sec-note" id="keyEncryptionNote">Tersimpan terenkripsi (AES-GCM), hanya di perangkat.</p>
+      </div>
 
-  <!-- SETTINGS / CONNECTION modal -->
+      <div class="card">
+        <div class="card-head"><h3>System Prompt</h3><button class="ghost-btn tiny" id="btnTogglePrompt">Perinci</button></div>
+        <div class="prompt-summary" id="promptSummary">Menyunting hasil terjemahan (bukan menerjemahkan ulang): makna → typo → naturalitas → efisiensi; pertahankan struktur, istilah Inggris &amp; kata ganti; output 3 bagian.</div>
+        <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10"></textarea>
+        <div class="prompt-tools"><button class="ghost-btn tiny" id="btnReloadPrompt">Muat ulang</button><button class="ghost-btn tiny" id="btnResetPrompt">Reset</button><span class="muted" id="promptChars"></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Keamanan</h3><span class="mini-badge" id="vaultState">belum dibuka</span></div>
+        <div class="sec-field"><label class="field-label">Mode penyimpanan</label>
+          <div class="seg-tabs" id="storageMode"><button class="seg-tab active" data-mode="device">Perangkat (enkripsi)</button><button class="seg-tab" data-mode="session">Hanya sesi</button></div>
+        </div>
+        <div id="vaultUnlockWrap"><label class="field-label">Passphrase</label>
+          <div class="pass-row"><input id="unlockPass" class="input" type="password" autocomplete="off" placeholder="passphrase…" /><button class="ghost-btn" id="btnUnlock">Buka</button></div>
+        </div>
+        <div class="sec-tools">
+          <button class="ghost-btn" id="btnLock">Kunci dari memori</button>
+          <button class="ghost-btn" id="btnRotateSecret">Gateway secret</button>
+          <button class="ghost-btn danger" id="btnWipeVault">Hapus semua kunci</button>
+        </div>
+        <div class="sec-checklist"><ul id="secChecklist"></ul></div>
+      </div>
+
+      <div class="card guide-body">
+        <h3>Panduan singkat</h3>
+        <ol>
+          <li>Di <b>Sunting</b>: tempel / unggah file hasil terjemahan (.txt).</li>
+          <li>Pilih provider &amp; model (di sini, atau lewat “ubah →” di Sunting).</li>
+          <li>Klik <b>Jalankan</b> → hasil di tab Hasil / Perubahan / Perlu dicek.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <!-- connection modal -->
   <div id="modal" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h3>Pengaturan &amp; Koneksi</h3><button class="icon-btn" id="modalClose">&times;</button></div>
+      <div class="modal-head"><h3>Koneksi &amp; Secret</h3><button class="icon-btn" id="modalClose">&times;</button></div>
       <label class="field-label">URL Worker</label>
-      <input id="workerUrl" class="input" placeholder="(kosongkan = same-origin /api)" autocomplete="off" spellcheck="false" />
-      <p class="hint">Biarkan kosong bila frontend &amp; Worker di-domain yang sama (deploy Ocrku). Isi bila terpisah.</p>
+      <input id="workerUrl" class="input" placeholder="(kosongkan = same-origin)" autocomplete="off" spellcheck="false" />
+      <p class="hint">Kosongkan bila frontend &amp; Worker satu domain (deploy Ocrku).</p>
       <label class="field-label">Gateway Secret (opsional)</label>
-      <input id="gatewaySecretInput" class="input" type="password" placeholder="wajib jika Worker mengaktifkan GATEWAY_SECRET" autocomplete="off" spellcheck="false" />
-      <label class="field-label">Koneksi</label>
-      <button class="ghost-btn" id="btnCheckConn">Uji Koneksi Worker</button>
-      <div class="modal-foot"><button class="ghost-btn" id="modalCancel">Batal</button><button class="btn-primary" id="modalSave">Simpan</button></div>
+      <input id="gatewaySecretInput" class="input" type="password" placeholder="bila Worker menyalakan GATEWAY_SECRET" autocomplete="off" spellcheck="false" />
+      <div class="modal-foot"><button class="ghost-btn" id="btnCheckConn">Tes koneksi</button><span class="spacer"></span><button class="ghost-btn" id="modalCancel">Batal</button><button class="btn-primary" id="modalSave">Simpan</button></div>
     </div>
   </div>
 
-  <!-- passphrase first-use modal -->
+  <!-- passphrase first-use -->
   <div id="passModal" class="modal hidden">
     <div class="modal-card">
-      <div class="modal-head"><h3>Aman Kunci API</h3></div>
-      <p class="muted">Passphrase dipakai mengenkripsi (AES-GCM) semua kunci di perangkat. <strong>Tidak bisa dipulihkan</strong> bila lupa.</p>
+      <div class="modal-head"><h3>Aman kunci API</h3></div>
+      <p class="muted">Passphrase mengenkripsi (AES-GCM) semua kunci di perangkat. Tidak bisa dipulihkan bila lupa.</p>
       <input id="pass1" class="input" type="password" placeholder="Passphrase (min. 8 karakter)" autocomplete="off" />
       <input id="pass2" class="input" type="password" placeholder="Ulangi passphrase" autocomplete="off" />
-      <div class="modal-foot"><button class="ghost-btn" id="passSkip">Lewati (hanya sesi)</button><button class="btn-primary" id="passCreate">Kunci &amp; Simpan</button></div>
+      <div class="modal-foot"><button class="ghost-btn" id="passSkip">Lewati (hanya sesi)</button><button class="btn-primary" id="passCreate">Kunci &amp; simpan</button></div>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <footer class="app-footer"><span class="shield">Lokal &bull; kunci terkirim terenkripsi (TLS) ke Worker</span><span class="muted">TL Editor &bull; Cloudflare Pages + Worker</span></footer>
+  <footer class="app-footer"><span class="shield">Lokal · kunci terkirim terenkripsi (TLS) ke Worker</span></footer>
   <script src="./app.js"></script>
 </body>
 </html>
