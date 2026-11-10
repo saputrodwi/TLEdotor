@@ -41,7 +41,7 @@ const PROVIDERS = {
     keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
   },
   default: {
-    label: 'Default', icon: 'D', tag: '2.5 Flash',
+    label: 'Default', icon: 'D', tag: '',
     keyLabel: '', multiKey: false, serverKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
     modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
