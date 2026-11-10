@@ -3,6 +3,7 @@
    Sunting tab: input + run bar + results (inline)
    Pengaturan tab: provider, keys, model, prompt, security
    Cloudflare Pages (static) -> Pages Function -> Worker
+   Default: Cloudflare [ai] binding (no key, no token).
    Security: AES-GCM + PBKDF2 encrypted key vault, memory-only
    plaintext, per-provider multi-key, HTTPS-only. No key logging.
    ============================================================ */
@@ -33,9 +34,9 @@ function toast(msg, kind = '') {
 /* ---------- provider catalog ---------- */
 const PROVIDERS = {
   gemini: {
-    label: 'Gemini', icon: 'G', tag: 'Gemini 3.8 Flash',
+    label: 'Gemini', icon: 'G', tag: 'Gemini 3.5 Flash Lite',
     keyLabel: 'Gemini API Key', multiKey: true,
-    models: ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-live', 'gemini-3.8-flash-lite-tts'],
+    models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.8-live', 'gemini-3.8-flash-lite-tts'],
     keyHint: 'Mulai dengan AIza…',
     keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
   },
@@ -54,16 +55,16 @@ const PROVIDERS = {
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   cloudflare: {
-    label: 'Cloudflare', icon: 'CF', tag: 'Workers AI',
+    label: 'Cloudflare', icon: 'CF', tag: 'Workers AI [ai]',
     keyLabel: 'Cloudflare API Token', multiKey: true, needsAccount: true,
     models: [
-      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
       '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
       '@cf/qwen/qwen3.8-27b',
       '@cf/meta/llama-4-scout-17b-16e-instruct',
       '@cf/meta/llama-3.1-8b-instruct-fp8',
     ],
-    keyHint: 'Gratis (10k neuron/hari). Kosongkan Account ID = pakai [ai] binding.',
+    keyHint: 'Default: [ai] binding (gratis, 10k neuron/hari, tanpa key). Opsi: isi Account ID + Token untuk BYOK.',
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   custom: {
@@ -78,14 +79,13 @@ const PROVIDER_IDS = Object.keys(PROVIDERS);
 
 /* ---------- state ---------- */
 const state = {
-  provider: 'gemini',
+  provider: 'cloudflare',
   keys: { gemini: [], sumopod: [], agnes: [], cloudflare: [], custom: [] },
   models: {},
   temperature: 0.2,
   maxTokens: 8192,
   cloudflare: { accountId: '' },
   custom: { baseUrl: '', format: 'openai' },
-  settings: { workerUrl: '', gatewaySecret: '' },
   storageMode: 'device',
   unlocked: false,
   systemPrompt: '',
@@ -123,7 +123,6 @@ function collectVaultPayload() {
     maxTokens: state.maxTokens,
     cloudflare: state.cloudflare,
     custom: state.custom,
-    settings: state.settings,
   };
 }
 async function persistVault() {
@@ -146,7 +145,6 @@ function applyVaultPayload(p) {
   state.maxTokens = p.maxTokens ?? 8192;
   if (p.cloudflare) state.cloudflare = p.cloudflare;
   if (p.custom) state.custom = p.custom;
-  if (p.settings) state.settings = p.settings;
 }
 async function createVault(passphrase) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -236,7 +234,7 @@ function renderKeys() {
   }
   if (keys.length === 0) {
     const msg = state.provider === 'cloudflare'
-      ? 'Kosongkan = pakai [ai] binding server (tanpa kunci). Atau tambah token untuk BYOK.'
+      ? 'Default: [ai] binding — tanpa kunci, langsung jalan. Opsi: tambah token + Account ID untuk BYOK.'
       : 'Belum ada kunci untuk ' + p.label + '. Klik "+ Tambah kunci".';
     list.append(el('div', { class: 'muted', style: 'padding:4px' }, msg));
     updateSecChecklist();
@@ -276,15 +274,13 @@ $('#btnAddKey').onclick = async () => {
 };
 function autoSave() { if (state.unlocked) persistVault().catch(e => toast('Gagal menyimpan vault: ' + e.message, 'err')); }
 
-/* ---------- ping / health ---------- */
+/* ---------- API (same-origin, no gateway secret) ---------- */
 async function apiCall(path, body, method = 'POST') {
-  const base = state.settings.workerUrl ? state.settings.workerUrl.replace(/\/$/, '') : '';
   const headers = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (state.settings.gatewaySecret) headers['X-TL-Gateway'] = state.settings.gatewaySecret;
   let res;
   try {
-    res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch (e) {
     throw new Error('Tidak bisa menjangkau Worker. (' + e.message + ')');
   }
@@ -295,18 +291,25 @@ async function apiCall(path, body, method = 'POST') {
 
 $('#btnPingAll').onclick = async () => {
   const keys = state.keys[state.provider].map(k => k.value).filter(Boolean);
-  if (!keys.length && state.provider !== 'cloudflare') return toast('Tambahkan key dulu.', 'err');
-  const box = $('#pingResults'); box.classList.remove('hidden'); box.innerHTML = '<div class="muted">Menguji ' + Math.max(1, keys.length) + ' key…</div>';
+  const p = state.provider;
+  const cfBinding = (p === 'cloudflare' && !state.cloudflare.accountId && keys.length === 0);
+  if (!cfBinding && !keys.length) return toast('Tambahkan key dulu, atau kosongkan Account ID untuk [ai] binding.', 'err');
+  const box = $('#pingResults'); box.classList.remove('hidden');
+  box.innerHTML = '<div class="muted">' + (cfBinding ? 'Menguji [ai] binding…' : 'Menguji ' + keys.length + ' key…') + '</div>';
   try {
-    const body = { provider: state.provider, model: PROVIDERS[state.provider].models[0] || '', keys };
-    if (state.provider === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
-    if (state.provider === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
+    const body = { provider: p, model: PROVIDERS[p].models[0] || '', keys };
+    if (p === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
+    if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/ping', body);
     box.innerHTML = '';
-    r.results.forEach(row => {
-      box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
-        el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
-    });
+    if (cfBinding) {
+      box.append(el('div', { class: 'ping-row ok' }, el('span', {}, '[ai] binding'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
+    } else {
+      r.results.forEach(row => {
+        box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
+          el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
+      });
+    }
   } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message)); }
 };
 
@@ -334,9 +337,7 @@ function updateSourceStats() {
 function updateLineNumbers() {
   const on = $('#lineNumbers').checked;
   const g = $('#lineGutter');
-  if (!on || $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab !== 'paste') {
-    g.style.visibility = 'hidden'; g.innerHTML = ''; return;
-  }
+  if (!on) { g.style.visibility = 'hidden'; g.innerHTML = ''; return; }
   g.style.visibility = 'visible';
   const n = $('#txtPaste').value.split('\n').length;
   let s = ''; for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0');
@@ -360,25 +361,16 @@ $('#btnSample').onclick = async () => {
   catch { toast('Gagal memuat contoh', 'err'); }
 };
 
-/* source tabs */
-$$('[data-srctab]').forEach(b => b.onclick = () => {
-  $$('.seg-tabs [data-srctab]').forEach(x => x.classList.remove('active')); b.classList.add('active');
-  const mode = b.dataset.srctab;
-  $('#txtPaste').classList.toggle('hidden', mode === 'source');
-  $('#txtSource').classList.toggle('hidden', mode !== 'source');
-  $('#uploadHint').classList.toggle('hidden', mode !== 'upload');
-  $('#lineGutter').style.visibility = (mode === 'paste' && $('#lineNumbers').checked) ? 'visible' : 'hidden';
-  if (mode === 'paste') updateSourceStats();
-});
+/* file button always visible — no seg-tabs */
 $('#btnChooseFile').onclick = () => $('#fileInput').click();
 $('#fileInput').onchange = async (e) => {
-  const files = Array.from(e.target.files || []);
-  if (!files.length) return;
-  const txt = await files[0].text();
-  const activeSrc = $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab;
-  if (activeSrc === 'source') { $('#txtSource').value = txt; }
-  else { $('#txtPaste').value = txt; updateSourceStats(); }
-  toast('File "' + files[0].name + '" dimuat (' + files[0].size.toLocaleString() + ' bytes)', 'ok');
+  const files = e.target.files;
+  if (!files || !files.length) return;
+  const f = files[0];
+  const txt = await f.text();
+  $('#txtPaste').value = txt; updateSourceStats();
+  toast('File "' + f.name + '" dimuat (' + f.size.toLocaleString() + ' bytes)', 'ok');
+  e.target.value = '';
 };
 // drag & drop
 const srcArea = $('#srcArea');
@@ -387,9 +379,7 @@ srcArea.addEventListener('drop', async e => {
   const f = e.dataTransfer.files?.[0]; if (!f) return;
   if (!/\.txt$|text\/plain/i.test(f.name)) return toast('Hanya file .txt', 'err');
   const txt = await f.text();
-  const activeSrc = $$('.seg-tabs [data-srctab]').find(x => x.classList.contains('active'))?.dataset.srctab;
-  if (activeSrc === 'source') { $('#txtSource').value = txt; }
-  else { $('#txtPaste').value = txt; updateSourceStats(); }
+  $('#txtPaste').value = txt; updateSourceStats();
   toast('Dimuat: ' + f.name, 'ok');
 });
 
@@ -397,8 +387,9 @@ srcArea.addEventListener('drop', async e => {
 $('#btnLoadModels').onclick = async () => {
   const p = state.provider;
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
+  const cfBinding = (p === 'cloudflare' && !state.cloudflare.accountId);
   const panel = $('#modelList');
-  if (p !== 'cloudflare' && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
+  if (!cfBinding && p !== 'cloudflare' && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
   panel.innerHTML = '';
   panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
   try {
@@ -408,7 +399,7 @@ $('#btnLoadModels').onclick = async () => {
     const r = await apiCall(qs, null, 'GET');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, '0 model via API. Gunakan daftar bawaan atau ketik manual.'))); return; }
+    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, cfBinding ? 'Model [ai] tidak bisa di-list (pakai katalog bawaan di bawah).' : '0 model via API. Gunakan daftar bawaan atau ketik manual.'))); return; }
     models.slice(0, 100).forEach(m => {
       const row = el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') },
         el('span', { class: 'mid' }, m.id),
@@ -456,7 +447,7 @@ async function runEditor() {
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih / isi model', 'err');
   const cfBindingMode = (p === 'cloudflare' && !state.cloudflare.accountId && keys.length === 0);
-  if (!cfBindingMode && keys.length === 0) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].keyLabel, 'err');
+  if (!cfBindingMode && keys.length === 0) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].keyLabel + ', atau pakai Cloudflare [ai] (kosongkan Account ID)', 'err');
   if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom', 'err');
   if (!text.trim()) return toast('File terjemahan kosong', 'err');
 
@@ -532,26 +523,21 @@ function splitSections(raw) {
 
 function renderResults(raw, run) {
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
-  // HASIL
   const hasChanges = !!hasilText;
   const pre = $('#resultHasil');
   pre.innerHTML = '<code>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
   $('#cntHasil').textContent = hasChanges ? hasilText.split('\n').length : 0;
   $('#hasilNote').textContent = hasChanges ? '' : 'Tiga bagian tidak dikenali. Lihat tab Raw.';
-  // PERUBAHAN
   let perub = parseEntries(perubSec).filter(e => e.loc);
   const perubEmpty = /tidak ada perubahan/i.test(perubSec);
   renderCards($('#resultPerubahan'), perub, perubEmpty, 'perubahan');
   $('#cntPerubahan').textContent = perubEmpty ? 0 : perub.length;
-  // PERLU DICEK
   let dicek = parseEntries(dicekSec).filter(e => e.loc);
   const dicekEmpty = /tidak ada/i.test(dicekSec.trim()) && dicekSec.trim().length < 40;
   renderCards($('#resultDicek'), dicek, dicekEmpty, 'dicek');
   $('#cntDicek').textContent = dicekEmpty ? 0 : dicek.length;
-  // RAW
   $('#resultRaw').textContent = raw || '';
   $('#cntRaw').textContent = raw ? raw.split('\n').length : '—';
-  // META
   const m = $('#runMeta'); m.innerHTML = '';
   m.append(
     mkTag('Provider: ' + run.provider + ' · ' + run.model),
@@ -621,26 +607,6 @@ function showResTab(name) {
 }
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
 
-/* ---------- settings modal ---------- */
-$('#btnSettings').onclick = () => {
-  $('#workerUrl').value = state.settings.workerUrl;
-  $('#gatewaySecretInput').value = state.settings.gatewaySecret;
-  $('#modal').classList.remove('hidden');
-};
-$('#modalClose').onclick = $('#modalCancel').onclick = () => $('#modal').classList.add('hidden');
-$('#modalSave').onclick = () => {
-  const wu = $('#workerUrl').value.trim();
-  if (wu && !/^https?:\/\//.test(wu)) { wu = 'https://' + wu.replace(/^\/+/, ''); }
-  state.settings.workerUrl = wu.replace(/\/$/, '');
-  state.settings.gatewaySecret = $('#gatewaySecretInput').value.trim();
-  autoSave(); $('#modal').classList.add('hidden'); checkWorkerStatus(); toast('Pengaturan koneksi disimpan', 'ok');
-};
-$('#btnCheckConn').onclick = async () => {
-  state.settings.workerUrl = $('#workerUrl').value.trim().replace(/\/$/, '');
-  state.settings.gatewaySecret = $('#gatewaySecretInput').value.trim();
-  try { await apiCall('/api/health'); toast('Koneksi ke Worker berhasil', 'ok'); } catch (e) { toast('Gagal: ' + e.message, 'err'); }
-};
-
 /* ---------- security ---------- */
 function updateSecChecklist() {
   const items = [
@@ -648,7 +614,7 @@ function updateSecChecklist() {
     ['Key multi per-provider', true],
     ['Vault terenkripsi (AES-GCM + PBKDF2)', state.storageMode === 'device' ? state.unlocked : false],
     ['Plaintext hanya di memori', true],
-    ['Gateway Secret dipakai', !!state.settings.gatewaySecret],
+    ['[ai] binding Worker (Cloudflare)', state.provider === 'cloudflare' && !state.cloudflare.accountId],
   ];
   const ul = $('#secChecklist'); ul.innerHTML = '';
   items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '\u2713 ' : '\u25cb ') + label)));
@@ -683,10 +649,6 @@ $$('#storageMode [data-mode]').forEach(b => b.onclick = () => {
 $('#btnUnlock').onclick = async () => {
   try { await unlockVault($('#unlockPass').value); renderKeys(); updateSecChecklist(); toast('Vault dibuka', 'ok'); $('#unlockPass').value = ''; }
   catch (e) { toast('Passphrase salah / vault rusak: ' + e.message, 'err'); }
-};
-$('#btnRotateSecret').onclick = () => {
-  const v = prompt('Gateway Secret baru (kosongkan untuk menghapus):');
-  if (v != null) { state.settings.gatewaySecret = v.trim(); autoSave(); updateSecChecklist(); toast('Secret diperbarui'); }
 };
 
 /* ---------- first-use passphrase ---------- */
@@ -732,7 +694,6 @@ $('#passSkip').onclick = () => {
   updateSecChecklist();
   checkWorkerStatus();
 
-  // restore persisted state
   const meta = localStorage.getItem('tl.vault.meta');
   if (meta) {
     state.storageMode = 'device';
