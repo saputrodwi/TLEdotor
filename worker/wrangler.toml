@@ -13,6 +13,10 @@
 #   3) Pages → Settings → Bindings → Add → Service binding:
 #         Variable name: TL_WORKER   Service: tl-editor-worker
 #   4) Retry the Pages deployment so the binding goes live.
+#
+# Secrets (set via dashboard → Worker → Settings → Secrets, or CLI):
+#   wrangler secret put DEFAULT_API_KEY   (Agnes AI API key untuk provider "Default")
+#   wrangler secret put GATEWAY_SECRET   (opsional, untuk proteksi access)
 
 name = "tl-editor-worker"
 main = "index.js"
@@ -23,13 +27,6 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 
 [vars]
-# Set GATEWAY_SECRET as a Cloudflare Secret (wrangler secret put GATEWAY_SECRET),
-# not here, to keep it out of the repo. Empty = open (local dev).
 MAX_TEXT_BYTES = "400000"
 RATE_LIMIT_EDIT = "30"
 RATE_LIMIT_OTHER = "60"
-
-# Cloudflare Workers AI binding: lets the cloudflare provider run via
-# env.AI.run(model, ...) with no account id / API token (free 10k neurons/day).
-[ai]
-binding = "AI"
