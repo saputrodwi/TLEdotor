@@ -15,5 +15,3 @@ Pragram: no-cache
 /*.js:
   Cache-Control: no-cache, must-revalidate
 
-/prompts/*:
-  Cache-Control: public, max-age=86400
