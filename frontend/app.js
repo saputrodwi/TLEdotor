@@ -562,13 +562,6 @@ function renderResults(raw, run) {
   $('#resultRaw').textContent = raw || '';
   $('#cntRaw').textContent = raw ? raw.split('\n').length : '—';
   const m = $('#runMeta'); m.innerHTML = '';
-  m.append(
-    mkTag('Provider: ' + run.provider + ' · ' + run.model),
-    mkTag(run.ms + ' ms'),
-    run.keyCount > 0 ? mkTag('Key #' + (run.keyUsed + 1) + '/' + run.keyCount) : mkTag('[ai] binding'),
-    run.usage ? mkTag('tok in ' + (run.usage.promptTokenCount || run.usage.promptTokens || run.usage.prompt_tokens || '–')
-      + ' · out ' + (run.usage.candidatesTokenCount || run.usage.outputTokens || run.usage.completionTokens || run.usage.completion_tokens || '–')) : null,
-  );
   window._hasilText = hasilText; window._rawAll = raw;
 }
 function mkTag(t) { return el('span', { class: 'tag' }, t); }
