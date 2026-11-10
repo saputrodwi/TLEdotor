@@ -15,9 +15,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="mark">TL</span><b>TL Editor</b></div>
-    <div class="topbar-right">
-      <div class="chip chip-status" id="workerStatusChip"><span class="dot"></span><span id="workerStatusText">Memuat…</span></div>
-    </div>
+    <div class="topbar-right"></div>
   </header>
 
   <nav class="tabbar" role="tablist">
@@ -126,11 +124,6 @@
         <div id="kunciList" class="key-list"></div>
         <div id="pingResults" class="ping-results hidden"></div>
 
-        <div id="cfAccountWrap" class="hidden">
-          <label class="field-label">Cloudflare Account ID (opsional)</label>
-          <input id="cfAccountId" class="input" placeholder="kosongkan = pakai [ai] binding" autocomplete="off" spellcheck="false" />
-          <p class="hint">Kosongkan untuk memakai <code>[ai]</code> binding Worker (tanpa token, gratis 10k neuron/hari).</p>
-        </div>
         <div id="customWrap" class="hidden">
           <label class="field-label">Base URL (OpenAI-compatible, HTTPS)</label>
           <input id="customBaseUrl" class="input" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
@@ -184,7 +177,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <footer class="app-footer"><span class="shield">Lokal · kunci terkirim terenkripsi (TLS) ke Worker</span></footer>
+  <footer class="app-footer"></footer>
   <script src="./app.js?v=5"></script>
 </body>
 </html>

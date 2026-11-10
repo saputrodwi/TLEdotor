@@ -11,14 +11,13 @@
 //   CORS_ALLOWED_ORIGINS optional comma list; default = reflect request origin only
 //   MAX_TEXT_BYTES     optional max .txt input bytes (default 400000)
 
-const PROVIDERS = ['gemini', 'sumopod', 'agnes', 'cloudflare', 'custom'];
+const PROVIDERS = ['gemini', 'default', 'sumopod', 'custom'];
 
 // Trusted fixed provider endpoints (HTTPS only, pinned hosts).
 const BASE = {
   gemini: 'https://generativelanguage.googleapis.com',
+  default: 'https://apihub.agnes-ai.com/v1',
   sumopod: 'https://ai.sumopod.com/v1',
-  agnes: 'https://apihub.agnes-ai.com/v1',
-  cloudflare: 'https://api.cloudflare.com/client/v4',
 };
 
 const json = (obj, status = 200, headers = {}) =>
@@ -179,7 +178,7 @@ function keyStatusNote(status) {
 
 function buildOpenAIBase(provider, body, env) {
   if (provider === 'sumopod') return BASE.sumopod;
-  if (provider === 'agnes') return BASE.agnes;
+  if (provider === 'default') return BASE.default;
   // custom
   const raw = body.custom && body.custom.baseUrl;
   const u = assertSafeHttpsUrl(raw, 'custom baseUrl');
@@ -318,8 +317,8 @@ async function listModels(provider, body, key, timeoutMs) {
     });
     return items;
   }
-  if (provider === 'sumopod' || provider === 'agnes') {
-    const base = provider === 'sumopod' ? BASE.sumopod : BASE.agnes;
+  if (provider === 'sumopod' || provider === 'default') {
+    const base = provider === 'sumopod' ? BASE.sumopod : BASE.default;
     res = await fetch(base.replace(/\/v\d+$/, '') + '/v1/models', {
       headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(timeoutMs),
     });
@@ -385,27 +384,21 @@ async function handleEdit(req, env) {
 
   // provider-specific extras
   let cfAccount = null, customBaseUrl = null, customFormat = 'openai';
-  if (provider === 'cloudflare') {
-    cfAccount = String((body.cloudflare && body.cloudflare.accountId) || '').trim();
-    if (cfAccount && cfAccount.length > 64) throw httpError(400, 'NO_ACCOUNT', 'Cloudflare Account ID terlalu panjang');
-  }
   if (provider === 'custom') {
     customBaseUrl = String((body.custom && body.custom.baseUrl) || '').trim();
     if (!customBaseUrl) throw httpError(400, 'NO_CUSTOM_URL', 'Custom butuh baseUrl');
     customFormat = (body.custom && body.custom.format) === 'gemini' ? 'gemini' : 'openai';
-    // Validate safety up-front so SSRF / non-https / port errors surface clearly.
     const safeU = assertSafeHttpsUrl(customBaseUrl, 'custom baseUrl');
     let norm = safeU.toString().replace(/\/+$/, '');
     if (customFormat === 'openai' && !/\/v\d+$/.test(norm)) norm += '/v1';
     customBaseUrl = norm;
   }
 
-  // Cloudflare supports a server-side [ai] binding that needs NO keys; every
-  // other provider requires at least one key.
-  const bindingMode = provider === 'cloudflare' && !cfAccount;
-  const keys = bindingMode ? [] : validateKeys(provider, body.keys);
-  if (bindingMode && !env.AI) {
-    throw httpError(400, 'NO_CREDENTIALS', 'Cloudflare: [ai] binding tak tersedia di Worker. Redeploy Worker (setelah [ai] masuk wrangler.toml) atau isi Account ID + API Token.');
+  // "default" provider: key is server-side (env.DEFAULT_API_KEY), no user keys.
+  const serverKeyMode = provider === 'default';
+  const keys = serverKeyMode ? [] : validateKeys(provider, body.keys || []);
+  if (serverKeyMode && !env.DEFAULT_API_KEY) {
+    throw httpError(500, 'NO_SERVER_KEY', 'Worker: DEFAULT_API_KEY belum diset. Jalankan: wrangler secret put DEFAULT_API_KEY');
   }
 
   // build the user message
@@ -413,16 +406,17 @@ async function handleEdit(req, env) {
 
   const timeoutMs = 180_000; // 3 minutes
 
-  // Binding-only mode (Cloudflare [ai]): single credential, no key rotation.
+  // Server-key mode ("default"): single credential from env, no user keys.
   if (keys.length === 0) {
+    const key = env.DEFAULT_API_KEY || '';
     try {
       const { text: out, usage } = await dispatch({
-        provider, model, key: '', cfAccount: null, customBaseUrl, customFormat,
+        provider, model, key, cfAccount: null, customBaseUrl, customFormat,
         system, userMsg, temperature, maxTokens, timeoutMs, env,
       });
-      return json({ ok: true, provider, model, binding: true, keyUsed: -1, keyCount: 0, raw: out, usage: usage || null });
+      return json({ ok: true, provider, model, serverKey: true, keyUsed: -1, keyCount: 0, raw: out, usage: usage || null });
     } catch (e) {
-      return err(e.status || 502, 'PROVIDER_FAILED', 'Cloudflare [ai] binding gagal: ' + String(e.detail || e.message || 'kesalahan').slice(0, 260) + ' (periksa: Worker ter-deploy dengan [ai]? model tersedia & kuota neuron belum habis?)');
+      return err(e.status || 502, 'PROVIDER_FAILED', 'Default provider gagal: ' + String(e.detail || e.message || 'kesalahan').slice(0, 260));
     }
   }
   const strategy = (body.strategy || 'sequential').toLowerCase(); // sequential | round-robin
@@ -467,20 +461,10 @@ async function dispatch(o) {
   if (provider === 'gemini') {
     return callGemini({ base: BASE.gemini, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
   }
-  if (provider === 'cloudflare') {
-    if (o.cfAccount && o.key) {
-      return callCloudflare({ account: o.cfAccount, token: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
-    }
-    if (o.env && o.env.AI) {
-      return callCloudflareBinding(o.env, { model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
-    }
-    throw httpError(400, 'NO_CREDENTIALS', 'Cloudflare: butuh Account ID + Token atau [ai] binding');
-  }
-  // openai-compatible: sumopod, agnes, custom
+  // openai-compatible: default, sumopod, custom
   if (provider === 'custom' && o.customFormat === 'gemini') {
     return callGemini({ base: o.customBaseUrl, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
   }
-  // custom baseUrl is validated + normalized up-front; sumopod/agnes use pinned bases.
   const baseUrl = provider === 'custom' ? o.customBaseUrl : buildOpenAIBase(provider, {}, null);
   return callOpenAI({ baseUrl, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
 }
@@ -518,11 +502,13 @@ async function handleModels(req, env) {
   const body = {};
   // searchParams.get() already percent-decodes once; do NOT decode again.
   const cf = url.searchParams.get('cf');
-  if (cf) body.cloudflare = { accountId: cf };
   const cust = url.searchParams.get('cust');
   if (cust) body.custom = JSON.parse(cust);
-  if (provider === 'cloudflare') {
-    // no key needed for models list, but account id required via cf param
+  if (provider === 'default') {
+    // server key mode: use env key, no user keys needed
+    const srvKey = env.DEFAULT_API_KEY || '';
+    const items = await listModels(provider, body, srvKey, 20_000);
+    return json({ ok: true, provider, models: items.slice(0, 500) });
   } else if (!key) {
     throw httpError(400, 'NO_KEYS', 'Lihat model butuh 1 API key');
   }
@@ -535,7 +521,17 @@ async function handlePing(req, env) {
   const provider = String(body.provider || '').toLowerCase();
   if (!PROVIDERS.includes(provider)) throw httpError(400, 'BAD_PROVIDER', 'Provider tidak dikenal');
   const model = String(body.model || '').trim() || defaultModel(provider);
-  const keys = validateKeys(provider, body.keys);
+  // Server key mode: no user keys
+  if (provider === 'default') {
+    const srvKey = env.DEFAULT_API_KEY || '';
+    try {
+      await pingProvider(provider, srvKey, model, body, 12_000);
+      return json({ ok: true, results: [{ index: 0, ok: true, serverKey: true }] });
+    } catch (e) {
+      return json({ ok: true, results: [{ index: 0, ok: false, code: e.status || 599, detail: (e.detail || e.message || 'gagal').slice(0, 160), serverKey: true }] });
+    }
+  }
+  const keys = validateKeys(provider, body.keys || []);
   const results = [];
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
@@ -555,17 +551,10 @@ async function pingProvider(provider, key, model, body, timeoutMs) {
     if (!res.ok) { const e = new Error('ping'); e.status = res.status; e.detail = 'gemini ' + res.status; throw e; }
     return;
   }
-  if (provider === 'sumopod' || provider === 'agnes') {
-    const base = provider === 'sumopod' ? BASE.sumopod : BASE.agnes;
+  if (provider === 'sumopod' || provider === 'default') {
+    const base = provider === 'sumopod' ? BASE.sumopod : BASE.default;
     const res = await fetch(base.replace(/\/v\d+$/, '') + '/v1/models', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) { const e = new Error('ping'); e.status = res.status; e.detail = provider + ' ' + res.status; throw e; }
-    return;
-  }
-  if (provider === 'cloudflare') {
-    const account = body.cloudflare && body.cloudflare.accountId;
-    if (!account) throw httpError(400, 'NO_ACCOUNT', 'Cloudflare butuh Account ID');
-    const res = await fetch(BASE.cloudflare + '/accounts/' + encodeURIComponent(account) + '/ai/models?per_page=1', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) { const e = new Error('ping'); e.status = res.status; e.detail = 'cloudflare ' + res.status; throw e; }
     return;
   }
   const baseUrl = buildOpenAIBase('custom', { custom: { baseUrl: body.custom && body.custom.baseUrl } }, null);
@@ -575,10 +564,9 @@ async function pingProvider(provider, key, model, body, timeoutMs) {
 
 function defaultModel(provider) {
   switch (provider) {
-    case 'gemini': return 'gemini-3.8-flash';
+    case 'gemini': return 'gemini-3.5-flash-lite';
+    case 'default': return 'agnes-2.5-flash';
     case 'sumopod': return 'gpt-4o-mini';
-    case 'agnes': return 'agnes-2.5-flash';
-    case 'cloudflare': return '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
     case 'custom': return '';
     default: return '';
   }

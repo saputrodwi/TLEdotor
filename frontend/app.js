@@ -40,31 +40,19 @@ const PROVIDERS = {
     keyHint: 'Mulai dengan AIza…',
     keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
   },
+  default: {
+    label: 'Default', icon: 'D', tag: '2.5 Flash',
+    keyLabel: '', multiKey: false, serverKey: true,
+    models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
+    modelLabels: { 'agnes-2.5-flash': 'Model B (2.5 Flash)', 'agnes-2.0-flash': 'Model A (2.0 Flash)', 'agnes-3.0-flash': 'Model C (3.0 Flash)' },
+    keyHint: 'Kunci di server. Tanpa input.',
+    keyRe: null
+  },
   sumopod: {
     label: 'Sumopod', icon: 'S', tag: 'ai.sumopod.com',
     keyLabel: 'Sumopod API Key', multiKey: true,
     models: ['gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet', 'deepseek-chat'],
     keyHint: 'Base https://ai.sumopod.com/v1',
-    keyRe: /^[A-Za-z0-9_\-]{8,}$/
-  },
-  agnes: {
-    label: 'Agnes AI', icon: 'A', tag: 'apihub.agnes-ai.com',
-    keyLabel: 'Agnes API Key', multiKey: true,
-    models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-1.5-flash'],
-    keyHint: 'Base https://apihub.agnes-ai.com/v1',
-    keyRe: /^[A-Za-z0-9_\-]{8,}$/
-  },
-  cloudflare: {
-    label: 'Cloudflare', icon: 'CF', tag: 'Workers AI [ai]',
-    keyLabel: 'Cloudflare API Token', multiKey: true, needsAccount: true,
-    models: [
-      '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
-      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-      '@cf/qwen/qwen3.8-27b',
-      '@cf/meta/llama-4-scout-17b-16e-instruct',
-      '@cf/meta/llama-3.1-8b-instruct-fp8',
-    ],
-    keyHint: 'Default: [ai] binding (gratis, 10k neuron/hari, tanpa key). Opsi: isi Account ID + Token untuk BYOK.',
     keyRe: /^[A-Za-z0-9_\-]{8,}$/
   },
   custom: {
@@ -79,12 +67,11 @@ const PROVIDER_IDS = Object.keys(PROVIDERS);
 
 /* ---------- state ---------- */
 const state = {
-  provider: 'cloudflare',
-  keys: { gemini: [], sumopod: [], agnes: [], cloudflare: [], custom: [] },
-  models: {},
+  provider: 'default',
+  keys: { gemini: [], default: [], sumopod: [], custom: [] },
+  models: { default: 'agnes-2.5-flash' },
   temperature: 0.2,
   maxTokens: 8192,
-  cloudflare: { accountId: '' },
   custom: { baseUrl: '', format: 'openai' },
   storageMode: 'device',
   unlocked: false,
@@ -121,7 +108,6 @@ function collectVaultPayload() {
     models: state.models,
     temperature: state.temperature,
     maxTokens: state.maxTokens,
-    cloudflare: state.cloudflare,
     custom: state.custom,
   };
 }
@@ -143,7 +129,6 @@ function applyVaultPayload(p) {
   if (p.models) state.models = p.models;
   state.temperature = p.temperature ?? 0.2;
   state.maxTokens = p.maxTokens ?? 8192;
-  if (p.cloudflare) state.cloudflare = p.cloudflare;
   if (p.custom) state.custom = p.custom;
 }
 async function createVault(passphrase) {
@@ -200,14 +185,16 @@ function selectProvider(id) {
 }
 function syncProviderUI() {
   const p = PROVIDERS[state.provider];
-  $('#cfAccountWrap').classList.toggle('hidden', state.provider !== 'cloudflare');
   $('#customWrap').classList.toggle('hidden', state.provider !== 'custom');
-  $('#cfAccountId').value = state.cloudflare.accountId;
   $('#customBaseUrl').value = state.custom.baseUrl;
   $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
   $('#provKeyLabel').textContent = p.label;
   $('#runProviderLabel').textContent = p.label;
-  $('#keyEncryptionNote').textContent = p.keyLabel + ' • terenkripsi (AES-GCM), hanya di perangkat.';
+  if (p.serverKey) {
+    $('#keyEncryptionNote').textContent = 'Kunci di server. Tanpa input.';
+  } else {
+    $('#keyEncryptionNote').textContent = p.keyLabel + ' • terenkripsi (AES-GCM), hanya di perangkat.';
+  }
 }
 
 /* ---------- model select ---------- */
@@ -215,7 +202,10 @@ function renderModelSelect() {
   const p = PROVIDERS[state.provider];
   const sel = $('#modelSelect'); sel.innerHTML = '';
   sel.append(el('option', { value: '' }, '— pilih model —'));
-  (p.models || []).forEach(m => sel.append(el('option', { value: m }, m)));
+  (p.models || []).forEach(m => {
+    const label = (p.modelLabels && p.modelLabels[m]) || m;
+    sel.append(el('option', { value: m }, label));
+  });
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
   sel.value = state.models[state.provider];
 }
@@ -234,8 +224,8 @@ function renderKeys() {
     return;
   }
   if (keys.length === 0) {
-    const msg = state.provider === 'cloudflare'
-      ? 'Default: [ai] binding — tanpa kunci, langsung jalan. Opsi: tambah token + Account ID untuk BYOK.'
+    const msg = p.serverKey
+      ? 'Kunci di server (Worker). Tanpa input. Langsung pakai.'
       : 'Belum ada kunci untuk ' + p.label + '. Klik "+ Tambah kunci".';
     list.append(el('div', { class: 'muted', style: 'padding:4px' }, msg));
     updateSecChecklist();
@@ -293,18 +283,17 @@ async function apiCall(path, body, method = 'POST') {
 $('#btnPingAll').onclick = async () => {
   const keys = state.keys[state.provider].map(k => k.value).filter(Boolean);
   const p = state.provider;
-  const cfBinding = (p === 'cloudflare' && !state.cloudflare.accountId && keys.length === 0);
-  if (!cfBinding && !keys.length) return toast('Tambahkan key dulu, atau kosongkan Account ID untuk [ai] binding.', 'err');
+  const serverKey = PROVIDERS[p].serverKey;
+  if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
   const box = $('#pingResults'); box.classList.remove('hidden');
-  box.innerHTML = '<div class="muted">' + (cfBinding ? 'Menguji [ai] binding…' : 'Menguji ' + keys.length + ' key…') + '</div>';
+  box.innerHTML = '<div class="muted">' + (serverKey ? 'Menguji server key…' : 'Menguji ' + keys.length + ' key…') + '</div>';
   try {
     const body = { provider: p, model: PROVIDERS[p].models[0] || '', keys };
-    if (p === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/ping', body);
     box.innerHTML = '';
-    if (cfBinding) {
-      box.append(el('div', { class: 'ping-row ok' }, el('span', {}, '[ai] binding'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
+    if (serverKey) {
+      box.append(el('div', { class: 'ping-row ok' }, el('span', {}, 'Server key'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
     } else {
       r.results.forEach(row => {
         box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
@@ -315,13 +304,7 @@ $('#btnPingAll').onclick = async () => {
 };
 
 function checkWorkerStatus() {
-  apiCall('/api/health', null, 'GET').then(h => {
-    const c = $('#workerStatusChip'); c.className = 'chip chip-status ok';
-    $('#workerStatusText').textContent = 'Worker online';
-  }).catch(() => {
-    const c = $('#workerStatusChip'); c.className = 'chip chip-status err';
-    $('#workerStatusText').textContent = 'Worker offline';
-  });
+  apiCall('/api/health', null, 'GET').catch(() => {});
 }
 
 /* ---------- source file handling ---------- */
@@ -388,19 +371,18 @@ srcArea.addEventListener('drop', async e => {
 $('#btnLoadModels').onclick = async () => {
   const p = state.provider;
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
-  const cfBinding = (p === 'cloudflare' && !state.cloudflare.accountId);
+  const serverKey = PROVIDERS[p].serverKey;
   const panel = $('#modelList');
-  if (!cfBinding && p !== 'cloudflare' && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
+  if (!serverKey && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
   panel.innerHTML = '';
   panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
   try {
     let qs = '/api/models?provider=' + encodeURIComponent(p) + '&keys=' + encodeURIComponent(JSON.stringify(keys));
-    if (p === 'cloudflare') qs += '&cf=' + encodeURIComponent(state.cloudflare.accountId);
     if (p === 'custom') qs += '&cust=' + encodeURIComponent(JSON.stringify({ baseUrl: state.custom.baseUrl, format: state.custom.format }));
     const r = await apiCall(qs, null, 'GET');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, cfBinding ? 'Model [ai] tidak bisa di-list (pakai daftar di dropdown di atas).' : '0 model via API.'))); return; }
+    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, serverKey ? 'Pakai daftar di dropdown.' : '0 model via API.'))); return; }
     models.slice(0, 100).forEach(m => {
       const sel = $('#modelSelect');
       if (!sel.querySelector('option[value="' + m.id + '"]')) sel.append(el('option', { value: m.id }, m.id));
@@ -413,7 +395,7 @@ $('#modelSelect').onchange = () => { state.models[state.provider] = $('#modelSel
 /* ---------- params ---------- */
 $('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
 $('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; };
-$('#cfAccountId').oninput = () => { state.cloudflare.accountId = $('#cfAccountId').value.trim(); autoSave(); };
+
 $('#customBaseUrl').oninput = () => { state.custom.baseUrl = $('#customBaseUrl').value.trim(); autoSave(); };
 $$('#customFormatTabs [data-cf]').forEach(b => b.onclick = () => { state.custom.format = b.dataset.cf; syncProviderUI(); autoSave(); });
 
@@ -444,9 +426,9 @@ async function runEditor() {
   const model = $('#modelSelect').value;
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
   const text = $('#txtPaste').value;
-  if (!model) return toast('Pilih / isi model', 'err');
-  const cfBindingMode = (p === 'cloudflare' && !state.cloudflare.accountId && keys.length === 0);
-  if (!cfBindingMode && keys.length === 0) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].keyLabel + ', atau pakai Cloudflare [ai] (kosongkan Account ID)', 'err');
+  if (!model) return toast('Pilih model', 'err');
+  const serverKey = PROVIDERS[p].serverKey;
+  if (!serverKey && keys.length === 0) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].keyLabel, 'err');
   if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom', 'err');
   if (!text.trim()) return toast('File terjemahan kosong', 'err');
 
@@ -460,7 +442,6 @@ async function runEditor() {
       temperature: state.temperature, maxOutputTokens: state.maxTokens,
       strategy: 'round-robin',
     };
-    if (p === 'cloudflare') body.cloudflare = { accountId: state.cloudflare.accountId };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/edit', body);
     state.lastResult = r.raw;
@@ -617,7 +598,7 @@ function updateSecChecklist() {
     ['Key multi per-provider', true],
     ['Vault terenkripsi (AES-GCM + PBKDF2)', state.storageMode === 'device' ? state.unlocked : false],
     ['Plaintext hanya di memori', true],
-    ['[ai] binding Worker (Cloudflare)', state.provider === 'cloudflare' && !state.cloudflare.accountId],
+    ['[ai] binding Worker (Cloudflare)', false],
   ];
   const ul = $('#secChecklist'); ul.innerHTML = '';
   items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '\u2713 ' : '\u25cb ') + label)));

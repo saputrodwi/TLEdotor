@@ -124,35 +124,28 @@ mockFetch((u) => okRes({ choices: [] }));
   r = await call(req('/api/edit', { method: 'POST', body: { provider: 'custom', model: 'm', keys: ['sk-testkey1234'], text: 'P1', custom: { baseUrl: 'http://insecure.example.com/v1' } } }));
   check('non-https custom blocked -> 400', r.status === 400 && r.body.code === 'HTTPS_ONLY');
 
-  r = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: 'm', keys: ['sk-testkey1234'], text: 'P1', cloudflare: {} } }));
-  check('cloudflare no account + no binding -> NO_CREDENTIALS 400', r.status === 400 && r.body.code === 'NO_CREDENTIALS', 'code=' + (r.body && r.body.code));
-
-  r = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', keys: ['sk-testkey1234'], text: 'P1', cloudflare: { accountId: 'test-account' } } }));
-  check('cloudflare BYOK (account+token) -> 200', r.status === 200, 'status=' + r.status + ' ' + (r.body && r.body.code));
+  r = await call(req('/api/edit', { method: 'POST', body: { provider: 'default', model: 'agnes-2.5-flash', keys: [], text: 'P1' } }));
+  const eNoKey = { ...env, DEFAULT_API_KEY: '' };
+  r = await call(req('/api/edit', { method: 'POST', body: { provider: 'default', model: 'agnes-2.5-flash', keys: [], text: 'P1' } }), eNoKey);
+  check('default no server key -> 500 NO_SERVER_KEY', r.status === 500 && r.body.code === 'NO_SERVER_KEY', 'code=' + (r.body && r.body.code));
 
   r = await call(req('/api/edit', { method: 'POST', body: { provider: 'gemini', model: 'm', keys: ['sk-testkey1234'], text: 'P1' } }));
   check('valid edit no network fail -> provider path', r.status === 200, 'status=' + r.status);
 }
 restoreFetch();
 
-console.log('\n== /api/edit — cloudflare [ai] binding ==');
-mockFetch(() => okRes({}));
+console.log('\n== /api/edit — default provider (server key) ==');
+mockFetch((u, init) => {
+  if (u.includes('chat/completions')) {
+    return okRes({ choices: [{ message: { content: 'BAGIAN 1 — HASIL\nP1\n- ok-server-key' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+  }
+  return okRes({});
+});
 {
-  // Stub the server-side [ai] binding so we can exercise the no-credentials path.
-  const eBind = { ...env, AI: { run: async (model, opts) => 'BAGIAN 1 — HASIL\nP1\n- ok-binding ' + model } };
-  const r = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/aisingapore/gemma-sea-lion-v4-27b-it', keys: [], text: 'P1' } }), eBind);
-  check('cloudflare binding -> 200', r.status === 200, 'status=' + r.status + ' ' + (r.body && r.body.code));
-  check('cloudflare binding raw + flag', r.body.ok === true && r.body.binding === true && r.body.raw.includes('ok-binding'));
-
-  // binding model-not-found -> 404 with hint
-  const eMiss = { ...env, AI: { run: async () => { const e = new Error('Model not found'); e.status = 404; throw e; } } };
-  const rm = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/nope/does-not-exist', keys: [], text: 'P1' } }), eMiss);
-  check('cloudflare binding model-miss -> 404', rm.status === 404, 'status=' + rm.status);
-
-  // binding quota/limit -> 429
-  const eQuota = { ...env, AI: { run: async () => { const e = new Error('Rate limit exceeded, quota'); e.status = 429; throw e; } } };
-  const rq = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct-fp8', keys: [], text: 'P1' } }), eQuota);
-  check('cloudflare binding quota -> 429', rq.status === 429, 'status=' + rq.status);
+  const eSrv = { ...env, DEFAULT_API_KEY: 'srv-key-123' };
+  const r = await call(req('/api/edit', { method: 'POST', body: { provider: 'default', model: 'agnes-2.5-flash', keys: [], text: 'P1' } }), eSrv);
+  check('default server-key -> 200', r.status === 200, 'status=' + r.status + ' ' + (r.body && r.body.code));
+  check('default server-key raw + flag', r.body.ok === true && r.body.serverKey === true && r.body.raw.includes('ok-server-key'));
 }
 restoreFetch();
 
