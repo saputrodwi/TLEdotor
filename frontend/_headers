@@ -10,10 +10,10 @@ Pragram: no-cache
   Expires: 0
 
 /*.css:
-  Cache-Control: public, max-age=3600
+  Cache-Control: no-cache, must-revalidate
 
 /*.js:
-  Cache-Control: public, max-age=3600
+  Cache-Control: no-cache, must-revalidate
 
 /prompts/*:
   Cache-Control: public, max-age=86400
