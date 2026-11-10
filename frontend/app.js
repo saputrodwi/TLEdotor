@@ -314,9 +314,9 @@ $('#btnPingAll').onclick = async () => {
 };
 
 function checkWorkerStatus() {
-  apiCall('/api/health').then(h => {
+  apiCall('/api/health', null, 'GET').then(h => {
     const c = $('#workerStatusChip'); c.className = 'chip chip-status ok';
-    $('#workerStatusText').textContent = 'Worker online' + (h.gatewayProtected ? ' • ter-proteksi' : '');
+    $('#workerStatusText').textContent = 'Worker online';
   }).catch(() => {
     const c = $('#workerStatusChip'); c.className = 'chip chip-status err';
     $('#workerStatusText').textContent = 'Worker offline';
@@ -522,12 +522,16 @@ function splitSections(raw) {
 }
 
 function renderResults(raw, run) {
+  const resultsCard = $('#resultsCard');
+  if (resultsCard) resultsCard.classList.remove('hidden');
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
   const hasChanges = !!hasilText;
   const pre = $('#resultHasil');
-  pre.innerHTML = '<code>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
+  pre.innerHTML = '<code' + (hasChanges ? '' : ' class="placeholder"') + '>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
   $('#cntHasil').textContent = hasChanges ? hasilText.split('\n').length : 0;
   $('#hasilNote').textContent = hasChanges ? '' : 'Tiga bagian tidak dikenali. Lihat tab Raw.';
+  const resActions = $('#resActions');
+  if (resActions) resActions.classList.remove('hidden');
   let perub = parseEntries(perubSec).filter(e => e.loc);
   const perubEmpty = /tidak ada perubahan/i.test(perubSec);
   renderCards($('#resultPerubahan'), perub, perubEmpty, 'perubahan');

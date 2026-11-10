@@ -82,12 +82,11 @@
           <div class="rp-mini"><span>Temp</span><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" /><output id="tempVal">0.2</output></div>
           <div class="rp-mini"><span>Tokens</span><input id="maxTokens" type="number" class="mono" value="8192" min="256" max="32768" step="256" /></div>
           <button id="btnRun" class="btn-primary run">Jalankan</button>
-          <span class="muted rb-hint"><kbd>Ctrl</kbd>+<Enter></span>
         </div>
       </div>
 
-      <!-- results -->
-      <div class="card results">
+      <!-- results (hidden until first run) -->
+      <div class="card results hidden" id="resultsCard">
         <div class="res-tabs">
           <button class="res-tab active" data-res="hasil">Hasil <em id="cntHasil">0</em></button>
           <button class="res-tab" data-res="perubahan">Perubahan <em id="cntPerubahan">0</em></button>
@@ -96,17 +95,17 @@
         </div>
         <div class="res-body">
           <div class="res-pane" data-res="hasil">
-            <div class="res-actions">
+            <div class="res-actions hidden" id="resActions">
               <label class="check"><input type="checkbox" id="diffMode" /><span>diff</span></label>
               <button class="ghost-btn tiny" id="btnCopyResult">Salin</button>
               <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
               <span class="muted" id="hasilNote"></span>
             </div>
-            <pre class="mono-output" id="resultHasil"><code>Belum ada hasil.</code></pre>
+            <pre class="mono-output" id="resultHasil"><code class="placeholder">Tempel file atau klik “Pilih file .txt” di atas, lalu tekan Jalankan.</code></pre>
           </div>
-          <div class="res-pane hidden" data-res="perubahan"><div id="resultPerubahan" class="cards"><div class="empty">Belum ada hasil.</div></div></div>
-          <div class="res-pane hidden" data-res="dicek"><div id="resultDicek" class="cards"><div class="empty">Belum ada hasil.</div></div></div>
-          <div class="res-pane hidden" data-res="raw"><pre class="mono-output"><code id="resultRaw">Belum ada hasil.</code></pre></div>
+          <div class="res-pane hidden" data-res="perubahan"><div id="resultPerubahan" class="cards"><div class="empty">—</div></div></div>
+          <div class="res-pane hidden" data-res="dicek"><div id="resultDicek" class="cards"><div class="empty">—</div></div></div>
+          <div class="res-pane hidden" data-res="raw"><pre class="mono-output"><code id="resultRaw" class="placeholder">—</code></pre></div>
         </div>
         <div class="run-meta" id="runMeta"></div>
       </div>

@@ -119,6 +119,7 @@ kbd{font-family:var(--mono);font-size:10px;background:var(--card-2);border:1px s
 .mono-output .ln{display:block}
 .mono-output .ln.changed{background:var(--ok-bg);border-left:2px solid var(--ok);padding-left:6px;margin-left:-8px}
 .cards{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto}
+.mono-output .placeholder{color:var(--muted);font-style:italic}
 .empty{color:var(--muted);font-size:12px;padding:22px;text-align:center}
 .ccard{border:1px solid var(--line);border-radius:7px;background:var(--card-2);padding:10px}
 .ccard.warn{border-left:3px solid var(--warn)}
