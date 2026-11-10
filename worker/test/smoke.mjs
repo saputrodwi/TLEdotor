@@ -143,6 +143,16 @@ mockFetch(() => okRes({}));
   const r = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/aisingapore/gemma-sea-lion-v4-27b-it', keys: [], text: 'P1' } }), eBind);
   check('cloudflare binding -> 200', r.status === 200, 'status=' + r.status + ' ' + (r.body && r.body.code));
   check('cloudflare binding raw + flag', r.body.ok === true && r.body.binding === true && r.body.raw.includes('ok-binding'));
+
+  // binding model-not-found -> 404 with hint
+  const eMiss = { ...env, AI: { run: async () => { const e = new Error('Model not found'); e.status = 404; throw e; } } };
+  const rm = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/nope/does-not-exist', keys: [], text: 'P1' } }), eMiss);
+  check('cloudflare binding model-miss -> 404', rm.status === 404, 'status=' + rm.status);
+
+  // binding quota/limit -> 429
+  const eQuota = { ...env, AI: { run: async () => { const e = new Error('Rate limit exceeded, quota'); e.status = 429; throw e; } } };
+  const rq = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: '@cf/meta/llama-3.1-8b-instruct-fp8', keys: [], text: 'P1' } }), eQuota);
+  check('cloudflare binding quota -> 429', rq.status === 429, 'status=' + rq.status);
 }
 restoreFetch();
 

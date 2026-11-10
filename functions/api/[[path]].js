@@ -20,9 +20,10 @@ export function onRequest(context) {
       ok: false,
       code: 'NO_BINDING',
       message:
-        'Service binding TL_WORKER belum aktif. Pastikan Worker ter-deploy, ' +
-        'lalu di Pages → Settings → Bindings tambahkan Service binding ' +
-        'TL_WORKER → ocr.../tl-editor-worker, dan Retry deployment.',
+        'Service binding TL_WORKER belum aktif. Di Pages → Settings → Bindings, ' +
+        'tambah Service binding: Variable name "TL_WORKER" → Service "tl-editor-worker" ' +
+        '(nama harus sama dengan Worker yang sudah di-deploy), lalu Pages → Deployments → ' +
+        'Retry deployment (binding baru aktif setelah redeploy).',
     });
     return new Response(body, {
       status: 502,

@@ -169,20 +169,25 @@ async function unlockVault(passphrase) {
 }
 
 /* ---------- provider config UI ---------- */
-function renderProviderPills() {
-  const wrap = $('#providerPills'); wrap.innerHTML = '';
-  for (const id of PROVIDER_IDS) {
+const TILE_CODE = { gemini: 'G', sumopod: 'S', agnes: 'A', cloudflare: 'CF', custom: 'C' };
+function renderProviderTiles() {
+  const wrap = $('#providerTiles'); wrap.innerHTML = '';
+  PROVIDER_IDS.forEach(id => {
     const p = PROVIDERS[id];
-    const b = el('button', { class: 'ppill' + (state.provider === id ? ' active' : ''), title: p.keyHint },
-      el('span', { class: 'pi' }, p.icon), ' ', p.label);
+    const active = state.provider === id;
+    const b = el('button', { class: 'ptile' + (active ? ' active' : ''), title: p.keyHint },
+      el('span', { class: 'pico' }, TILE_CODE[id]),
+      el('span', { class: 'pname' }, p.label),
+      el('span', { class: 'ptag' }, p.tag),
+      active ? el('span', { class: 'ptag-on' }, 'AKTIF') : null,
+    );
     b.onclick = () => selectProvider(id);
     wrap.append(b);
-  }
+  });
 }
 function selectProvider(id) {
   state.provider = id;
-  $$('.ppill').forEach(b => b.classList.remove('active'));
-  $$('.ppill')[PROVIDER_IDS.indexOf(id)].classList.add('active');
+  renderProviderTiles();
   syncProviderUI();
   renderKeys();
   renderModelSelect();
@@ -193,56 +198,67 @@ function syncProviderUI() {
   $('#customWrap').classList.toggle('hidden', state.provider !== 'custom');
   $('#cfAccountId').value = state.cloudflare.accountId;
   $('#customBaseUrl').value = state.custom.baseUrl;
-  $$('[data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
-  $('#keyEncryptionNote').textContent = p.multiKey ? `AES-GCM • ${state.keys[state.provider].length} key` : 'AES-GCM';
+  $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
+  $('#keyEncryptionNote').textContent = p.keyLabel + ' • terenkripsi (AES-GCM), hanya di perangkat.';
+  updateRunSummary();
 }
 function renderModelSelect() {
   const p = PROVIDERS[state.provider];
   const dl = $('#modelOptions'); dl.innerHTML = '';
   (p.models || []).forEach(m => dl.append(el('option', { value: m }, m)));
-  if (state.models[state.provider]) { $('#modelInput').value = state.models[state.provider]; }
-  else { $('#modelInput').value = p.models[0] || ''; }
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
-  $('#modelListPanel').classList.add('hidden');
+  $('#modelInput').value = state.models[state.provider];
+  updateRunSummary();
+}
+function updateRunSummary() {
+  const p = PROVIDERS[state.provider];
+  const pc = $('#providerChip'); if (pc) pc.textContent = p.label;
+  const mc = $('#modelChip');
+  if (mc) { const m = state.models[state.provider] || ''; mc.textContent = m ? (m.length > 34 ? m.slice(0, 32) + '…' : m) : '—'; }
 }
 
 /* ---------- keys UI ---------- */
 function renderKeys() {
-  const list = $('#keyList'); list.innerHTML = '';
+  const list = $('#kunciList'); list.innerHTML = '';
   const keys = state.keys[state.provider];
   const p = PROVIDERS[state.provider];
   $('#keyCount').textContent = keys.filter(k => k.value).length + ' aktif';
   if (state.storageMode === 'device' && !state.unlocked && localStorage.getItem('tl.vault.data')) {
-    const b = el('button', { class: 'ghost-btn', style: 'width:100%;padding:8px' }, '🔒 Terkunci — ' + keys.length + ' key tersimpan terenkripsi. Buka kunci.');
+    const b = el('button', { class: 'ghost-btn', style: 'width:100%;padding:8px' }, 'Terkunci — ' + keys.length + ' kunci tersimpan terenkripsi. Buka kunci.');
     b.onclick = () => { showView('security'); setTimeout(() => $('#unlockPass').focus(), 50); };
-    list.append(el('div', { class: 'key-item' }, el('span', { class: 'kdot' }), b));
+    list.append(el('div', { class: 'key-item' }, el('span', { class: 'kdot' }), el('span', { class: 'kname' }, ''), b));
+    updateSecChecklist();
     return;
   }
   if (keys.length === 0) {
-    list.append(el('div', { class: 'muted', style: 'padding:4px' }, 'Belum ada key untuk ' + p.label + '. Klik “+ Tambah Key”.'));
+    const msg = state.provider === 'cloudflare'
+      ? 'Kosongkan = pakai [ai] binding server (tanpa kunci). Atau tambah token untuk BYOK.'
+      : 'Belum ada kunci untuk ' + p.label + '. Klik “+ Tambah kunci”.';
+    list.append(el('div', { class: 'muted', style: 'padding:4px' }, msg));
+    updateSecChecklist();
     return;
   }
   keys.forEach((k, i) => {
     const valid = p.keyRe ? p.keyRe.test(k.value) : k.value.length >= 4;
     const mask = k.value ? '•'.repeat(Math.min(10, Math.max(4, Math.floor(k.value.length / 3)))) + ' ' + k.value.slice(-4) : '(kosong)';
-    const item = el('div', { class: 'key-item' + (valid ? '' : ' invalid'), dataset: { i } });
+    const item = el('div', { class: 'key-item' + (valid ? '' : ' invalid') });
     item.append(
       el('span', { class: 'kdot' }),
-      el('span', { class: 'kname' }, 'Key ' + (i + 1)),
+      el('span', { class: 'kname' }, 'Kunci ' + (i + 1)),
       el('span', { class: 'kmask', id: 'mask-' + k.id }, k.shown ? k.value : mask),
     );
     const acts = el('span', { class: 'kactions' });
-    const eye = el('button', { class: 'kbtn', title: 'Tampilkan' }, '👁');
-    eye.onclick = () => { k.shown = !k.shown; eye.textContent = k.shown ? '🙈' : '👁'; $('#mask-' + k.id).textContent = k.shown ? k.value : mask; };
-    const inp = el('input', { class: 'input', value: k.value, placeholder: p.keyLabel, style: 'width:150px' });
-    inp.onchange = () => { k.value = inp.value.trim(); renderKeys(); autoSave(); toast('Key diperbarui, ' + p.keyLabel); };
-    const del = el('button', { class: 'kbtn del', title: 'Hapus' }, '✕');
+    const eye = el('button', { class: 'kbtn', title: 'Tampilkan' }, 'Lihat');
+    eye.style.fontSize = '11px';
+    eye.onclick = () => { k.shown = !k.shown; eye.textContent = k.shown ? 'Semb' : 'Lihat'; const m2 = document.getElementById('mask-' + k.id); if (m2) m2.textContent = k.shown ? k.value : mask; };
+    const del = el('button', { class: 'kbtn del', title: 'Hapus' }, '×');
     del.onclick = () => { keys.splice(i, 1); renderKeys(); autoSave(); };
     acts.append(eye, del);
     item.append(acts);
-    // inline edit input below row
-    const row2 = el('div', { style: 'margin-top:4px' }, inp);
-    list.append(item, row2);
+    const inp = el('input', { class: 'kedit', value: k.value, placeholder: p.keyLabel, spellcheck: 'false' });
+    inp.onchange = () => { k.value = inp.value.trim(); renderKeys(); autoSave(); toast('Kunci diperbarui', 'ok'); };
+    item.append(inp);
+    list.append(item);
   });
   updateSecChecklist();
 }
@@ -285,7 +301,7 @@ $('#btnPingAll').onclick = async () => {
     box.innerHTML = '';
     r.results.forEach(row => {
       box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
-        el('span', {}, 'Key ' + (row.index + 1)), el('span', {}, row.ok ? '✔ valid' : '✘ ' + (row.detail || row.code))));
+        el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
     });
   } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message)); }
 };
@@ -370,9 +386,10 @@ srcArea.addEventListener('drop', async e => {
 $('#btnLoadModels').onclick = async () => {
   const p = state.provider;
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
-  const panel = $('#modelListPanel');
-  if (p !== 'cloudflare' && keys.length === 0) return toast('Isi minimal 1 API key untuk load model ' + PROVIDERS[p].label, 'err');
-  panel.classList.remove('hidden'); panel.innerHTML = '<div class="muted">Memuat daftar model ' + PROVIDERS[p].label + '…</div>';
+  const panel = $('#modelList');
+  if (p !== 'cloudflare' && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
+  panel.innerHTML = '';
+  panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
   try {
     let qs = '/api/models?provider=' + encodeURIComponent(p) + '&keys=' + encodeURIComponent(JSON.stringify(keys));
     if (p === 'cloudflare') qs += '&cf=' + encodeURIComponent(state.cloudflare.accountId);
@@ -380,21 +397,33 @@ $('#btnLoadModels').onclick = async () => {
     const r = await apiCall(qs, null, 'GET');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) panel.append(el('div', { class: 'muted' }, '0 model ditemukan via API. Gunakan daftar bawaan atau ketik manual.'));
+    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, '0 model via API. Gunakan daftar bawaan (input di atas) atau ketik manual.'))); return; }
     models.slice(0, 100).forEach(m => {
-      const row = el('div', { class: 'model-opt' }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || ''));
-      row.onclick = () => { state.models[p] = m.id; $('#modelInput').value = m.id; autoSave(); toast('Model: ' + m.id); };
+      const row = el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || ''));
+      row.onclick = () => { state.models[p] = m.id; $('#modelInput').value = m.id; $$('#modelList .model-opt').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); updateRunSummary(); autoSave(); };
       panel.append(row);
     });
   } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
 };
-$('#modelInput').oninput = () => { state.models[state.provider] = $('#modelInput').value.trim(); };
-$$('.preset').forEach(b => b.onclick = () => { state.maxTokens = +b.dataset.max; $('#maxTokens').value = state.maxTokens; $('#maxTokVal').textContent = state.maxTokens.toLocaleString(); autoSave(); });
-$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; $('#maxTokVal').textContent = state.maxTokens.toLocaleString(); };
-$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
+$('#modelInput').oninput = () => { state.models[state.provider] = $('#modelInput').value.trim(); updateRunSummary(); };
+
+function applyParams() {
+  const tv = state.temperature.toFixed(2), mv = Number(state.maxTokens).toLocaleString('en-US');
+  ['editorTempVal', 'tempVal'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = tv; });
+  ['editorMaxTokVal', 'maxTokVal'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = mv; });
+  const tP = $('#temperature'), tE = $('#editorTemperature');
+  if (tP) tP.value = state.temperature; if (tE) tE.value = state.temperature;
+  const mP = $('#maxTokens'), mE = $('#editorMaxTokens');
+  if (mP) mP.value = state.maxTokens; if (mE) mE.value = state.maxTokens;
+}
+$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; applyParams(); };
+$('#editorTemperature').oninput = () => { state.temperature = +$('#editorTemperature').value; applyParams(); };
+$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; applyParams(); };
+$('#editorMaxTokens').oninput = () => { state.maxTokens = +$('#editorMaxTokens').value; applyParams(); };
+$$('.preset').forEach(b => b.onclick = () => { state.maxTokens = +b.dataset.max; applyParams(); autoSave(); });
 $('#cfAccountId').oninput = () => { state.cloudflare.accountId = $('#cfAccountId').value.trim(); autoSave(); };
 $('#customBaseUrl').oninput = () => { state.custom.baseUrl = $('#customBaseUrl').value.trim(); autoSave(); };
-$$('[data-cf]').forEach(b => b.onclick = () => { state.custom.format = b.dataset.cf; syncProviderUI(); autoSave(); });
+$$('#customFormatTabs [data-cf]').forEach(b => b.onclick = () => { state.custom.format = b.dataset.cf; syncProviderUI(); autoSave(); });
 
 /* ---------- system prompt ---------- */
 async function loadDefaultPrompt() {
@@ -534,7 +563,7 @@ function tag(t) { const s = el('span', { class: 'tag' }, t); return s; }
 
 function renderCards(container, entries, isEmpty, kind) {
   container.innerHTML = '';
-  if (isEmpty) { container.append(el('div', { class: 'empty' }, kind === 'dicek' ? 'Tidak ada bagian yang perlu dicek. 🎉' : 'Tidak ada perubahan.')); return; }
+  if (isEmpty) { container.append(el('div', { class: 'empty' }, kind === 'dicek' ? 'Tidak ada bagian yang perlu dicek.' : 'Tidak ada perubahan.')); return; }
   if (!entries.length) { container.append(el('div', { class: 'empty' }, 'Format bagian tidak dikenali — lihat tab “Raw”.')); return; }
   entries.forEach(e => {
     if (kind === 'perubahan') {
@@ -595,25 +624,13 @@ $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.las
 /* ---------- views / rail ---------- */
 function showView(name) {
   $$('.view').forEach(v => v.classList.add('hidden'));
-  const map = { editor: 'view-editor', results: 'view-results', models: 'view-models', guide: 'view-guide', security: 'view-security' };
+  const map = { editor: 'view-editor', results: 'view-results', provider: 'view-provider', guide: 'view-guide', security: 'view-security' };
   const t = document.getElementById(map[name]); if (t) t.classList.remove('hidden');
   $$('.rail-item').forEach(r => r.classList.toggle('active', r.dataset.view === name));
 }
 $$('.rail-item').forEach(r => r.onclick = () => showView(r.dataset.view));
+const _btnToProvider = $('#btnToProvider'); if (_btnToProvider) _btnToProvider.onclick = () => showView('provider');
 $('#diffMode').checked = false;
-
-/* ---------- provider catalog view ---------- */
-function renderCatalog() {
-  const c = $('#providerCatalog'); c.innerHTML = '';
-  PROVIDER_IDS.forEach(pid => {
-    const p = PROVIDERS[pid];
-    c.append(el('div', { class: 'cat-item' },
-      el('h4', {}, p.icon + '  ' + p.label, '  ', el('span', { class: 'mini-badge' }, p.tag)),
-      el('p', { class: 'muted' }, p.keyHint),
-      el('div', { class: 'models' }, 'Model bawaan: ' + (p.models.length ? p.models.join(', ') : '(isi manual / Load Models)')),
-    ));
-  });
-}
 
 /* ---------- settings modal ---------- */
 $('#btnSettings').onclick = () => {
@@ -715,10 +732,10 @@ $('#passSkip').onclick = () => {
 
 /* ---------- init ---------- */
 (async function init() {
-  renderProviderPills();
+  renderProviderTiles();
   renderKeys();
   renderModelSelect();
-  renderCatalog();
+  applyParams();
   updateSourceStats();
   updatePromptMeta();
   showView('editor');

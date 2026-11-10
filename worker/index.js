@@ -286,12 +286,17 @@ async function callCloudflareBinding(env, { model, system, userMsg, temperature,
   try {
     out = await Promise.race([
       env.AI.run(model, opts),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout setelah ' + Math.round(timeoutMs / 1000) + ' detik')), timeoutMs)),
     ]);
   } catch (e) {
-    const error = new Error('cloudflare binding: ' + (e && e.message ? e.message : 'gagal'));
-    error.status = 503;
-    error.detail = (e && e.message) ? e.message : 'cloudflare binding gagal';
+    const detail = String((e && (e.message || e)) || 'gagal');
+    let status = e && e.status ? Number(e.status) : 503, hint = '';
+    if (/not found|unknown|invalid model|doesn'?t exist/i.test(detail)) { status = 404; hint = ' (model "' + model + '" tak tersedia di akun/entitlement kamu)'; }
+    else if (/quota|rate|exceed|limit|insufficient|entitl?e?d|billing/i.test(detail)) { status = 429; hint = ' (kuota/limit — periksa kuota neuron gratis 10k/hari)'; }
+    else if (/timeout/i.test(detail)) { status = 504; }
+    const error = new Error('cloudflare binding: ' + detail);
+    error.status = status;
+    error.detail = detail + hint;
     throw error;
   }
   const text = typeof out === 'string' ? out : (out && (out.text || out.response)) || JSON.stringify(out);
@@ -400,7 +405,7 @@ async function handleEdit(req, env) {
   const bindingMode = provider === 'cloudflare' && !cfAccount;
   const keys = bindingMode ? [] : validateKeys(provider, body.keys);
   if (bindingMode && !env.AI) {
-    throw httpError(400, 'NO_CREDENTIALS', 'Cloudflare: aktifkan [ai] binding di wrangler.toml, atau isi Account ID + API Token');
+    throw httpError(400, 'NO_CREDENTIALS', 'Cloudflare: [ai] binding tak tersedia di Worker. Redeploy Worker (setelah [ai] masuk wrangler.toml) atau isi Account ID + API Token.');
   }
 
   // build the user message
@@ -417,7 +422,7 @@ async function handleEdit(req, env) {
       });
       return json({ ok: true, provider, model, binding: true, keyUsed: -1, keyCount: 0, raw: out, usage: usage || null });
     } catch (e) {
-      return err(e.status || 502, 'PROVIDER_FAILED', 'Cloudflare binding gagal: ' + String(e.detail || e.message || 'kesalahan').slice(0, 200));
+      return err(e.status || 502, 'PROVIDER_FAILED', 'Cloudflare [ai] binding gagal: ' + String(e.detail || e.message || 'kesalahan').slice(0, 260) + ' (periksa: Worker ter-deploy dengan [ai]? model tersedia & kuota neuron belum habis?)');
     }
   }
   const strategy = (body.strategy || 'sequential').toLowerCase(); // sequential | round-robin
