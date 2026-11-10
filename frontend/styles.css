@@ -92,7 +92,7 @@ kbd{font-family:var(--mono);font-size:10px;background:var(--card-2);border:1px s
 .rb-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
 .rb-val{font-size:13px;font-weight:600}
 .rb-model{display:flex;gap:6px;flex:1 1 220px;min-width:200px;margin-left:auto}
-.model-input{flex:1 1 auto;min-width:120px;padding:7px 10px;font-size:12.5px}
+.model-select{flex:1 1 auto;min-width:140px;padding:7px 10px;font-size:12.5px;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 .model-list{border:1px solid var(--line);border-radius:7px;max-height:190px;overflow:auto;background:var(--card-2)}
 .model-list:empty{display:none}
 .model-opt{display:flex;align-items:center;gap:9px;padding:7px 10px;font-family:var(--mono);font-size:12px;border-bottom:1px solid var(--line-soft);cursor:pointer}

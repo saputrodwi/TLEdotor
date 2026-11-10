@@ -213,10 +213,11 @@ function syncProviderUI() {
 /* ---------- model select ---------- */
 function renderModelSelect() {
   const p = PROVIDERS[state.provider];
-  const dl = $('#modelOptions'); dl.innerHTML = '';
-  (p.models || []).forEach(m => dl.append(el('option', { value: m }, m)));
+  const sel = $('#modelSelect'); sel.innerHTML = '';
+  sel.append(el('option', { value: '' }, '— pilih model —'));
+  (p.models || []).forEach(m => sel.append(el('option', { value: m }, m)));
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
-  $('#modelInput').value = state.models[state.provider];
+  sel.value = state.models[state.provider];
 }
 
 /* ---------- keys UI ---------- */
@@ -399,17 +400,15 @@ $('#btnLoadModels').onclick = async () => {
     const r = await apiCall(qs, null, 'GET');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, cfBinding ? 'Model [ai] tidak bisa di-list (pakai katalog bawaan di bawah).' : '0 model via API. Gunakan daftar bawaan atau ketik manual.'))); return; }
+    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, cfBinding ? 'Model [ai] tidak bisa di-list (pakai daftar di dropdown di atas).' : '0 model via API.'))); return; }
     models.slice(0, 100).forEach(m => {
-      const row = el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') },
-        el('span', { class: 'mid' }, m.id),
-        el('span', { class: 'mdisp' }, m.displayName || ''));
-      row.onclick = () => { state.models[p] = m.id; $('#modelInput').value = m.id; $$('#modelList .model-opt').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); autoSave(); };
-      panel.append(row);
+      const sel = $('#modelSelect');
+      if (!sel.querySelector('option[value="' + m.id + '"]')) sel.append(el('option', { value: m.id }, m.id));
+      panel.append(el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || '')));
     });
   } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
 };
-$('#modelInput').oninput = () => { state.models[state.provider] = $('#modelInput').value.trim(); };
+$('#modelSelect').onchange = () => { state.models[state.provider] = $('#modelSelect').value; autoSave(); };
 
 /* ---------- params ---------- */
 $('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
@@ -442,7 +441,7 @@ $('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt
 /* ---------- run ---------- */
 async function runEditor() {
   const p = state.provider;
-  const model = $('#modelInput').value.trim();
+  const model = $('#modelSelect').value;
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih / isi model', 'err');
