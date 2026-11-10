@@ -1,0 +1,19 @@
+/* Cloudflare Pages _headers — prevent HTML caching, allow asset caching */
+/*
+Cache-Control: no-cache, no-store, must-revalidate
+Pragram: no-cache
+*/
+
+/index.html:
+  Cache-Control: no-cache, no-store, must-revalidate
+  Pragma: no-cache
+  Expires: 0
+
+/*.css:
+  Cache-Control: public, max-age=3600
+
+/*.js:
+  Cache-Control: public, max-age=3600
+
+/prompts/*:
+  Cache-Control: public, max-age=86400
