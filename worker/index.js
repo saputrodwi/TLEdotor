@@ -610,6 +610,8 @@ export default {
         let resp;
         if (method === 'GET' && path === '/api/health') resp = await handleHealth(req, env);
         else if (method === 'GET' && path === '/api/models') resp = await handleModels(req, env);
+        else if (method === 'GET' && path === '/api/prompt') { const m = await import('./prompts.js'); resp = m.handlePrompt(req, env); }
+        else if (method === 'GET' && path === '/api/sample') { const m = await import('./prompts.js'); resp = m.handleSample(req, env); }
         else if (method === 'POST' && path === '/api/ping') resp = await handlePing(req, env);
         else if (method === 'POST' && path === '/api/edit') resp = await handleEdit(req, env);
         else resp = err(404, 'NOT_FOUND', 'Endpoint tidak ditemukan');

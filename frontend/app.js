@@ -360,7 +360,7 @@ function normalizeText(t) {
 $('#btnNormalize').onclick = () => { const t = normalizeText($('#txtPaste').value); $('#txtPaste').value = t; updateSourceStats(); toast('Dinormalisasi', 'ok'); };
 $('#btnClearSource').onclick = () => { $('#txtPaste').value = ''; $('#txtSource').value = ''; updateSourceStats(); };
 $('#btnSample').onclick = async () => {
-  try { const r = await fetch('prompts/SAMPLE_CH121.txt'); $('#txtPaste').value = await r.text(); updateSourceStats(); toast('Contoh naskah dimuat', 'ok'); }
+  try { const r = await apiCall('/api/sample', null, 'GET'); $('#txtPaste').value = r.sample; updateSourceStats(); toast('Contoh naskah dimuat', 'ok'); }
   catch { toast('Gagal memuat contoh', 'err'); }
 };
 
@@ -446,7 +446,7 @@ function applyParams() {
 
 /* ---------- system prompt ---------- */
 async function loadDefaultPrompt() {
-  try { const r = await fetch('prompts/INDONESIAN_TRANSLATION_EDITOR.md'); state.systemPrompt = await r.text(); $('#systemPrompt').value = state.systemPrompt; updatePromptMeta(); }
+  try { const r = await fetch('/api/prompt'); state.systemPrompt = (await r.json()).prompt; $('#systemPrompt').value = state.systemPrompt; updatePromptMeta(); }
   catch { /* leave empty -> worker fallback */ }
 }
 function updatePromptMeta() { $('#promptChars').textContent = $('#systemPrompt').value.length.toLocaleString() + ' karakter'; }
