@@ -44,7 +44,7 @@ const PROVIDERS = {
     label: 'Default', icon: 'D', tag: '2.5 Flash',
     keyLabel: '', multiKey: false, serverKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
-    modelLabels: { 'agnes-2.5-flash': 'Model B (2.5 Flash)', 'agnes-2.0-flash': 'Model A (2.0 Flash)', 'agnes-3.0-flash': 'Model C (3.0 Flash)' },
+    modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
     keyHint: 'Kunci di server. Tanpa input.',
     keyRe: null
   },
@@ -200,15 +200,34 @@ function syncProviderUI() {
 /* ---------- model select ---------- */
 function renderModelSelect() {
   const p = PROVIDERS[state.provider];
-  const sel = $('#modelSelect'); sel.innerHTML = '';
-  sel.append(el('option', { value: '' }, '— pilih model —'));
+  const popup = $('#modelPopup'); popup.innerHTML = '';
+  const trigger = $('#modelTrigger');
   (p.models || []).forEach(m => {
     const label = (p.modelLabels && p.modelLabels[m]) || m;
-    sel.append(el('option', { value: m }, label));
+    const opt = el('button', { class: 'mopt' + (state.models[state.provider] === m ? ' sel' : '') }, label);
+    opt.onclick = (e) => {
+      e.stopPropagation();
+      state.models[state.provider] = m;
+      trigger.textContent = label;
+      $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
+      opt.classList.add('sel');
+      popup.classList.add('hidden');
+      autoSave();
+    };
+    popup.append(opt);
   });
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
-  sel.value = state.models[state.provider];
+  const cur = p.modelLabels && p.modelLabels[state.models[state.provider]] ? p.modelLabels[state.models[state.provider]] : state.models[state.provider];
+  trigger.textContent = cur || '— pilih model —';
 }
+$('#modelTrigger').onclick = (e) => {
+  e.stopPropagation();
+  $('#modelPopup').classList.toggle('hidden');
+};
+document.addEventListener('click', (e) => {
+  const popup = $('#modelPopup');
+  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.rb-model')) popup.classList.add('hidden');
+});
 
 /* ---------- keys UI ---------- */
 function renderKeys() {
@@ -384,13 +403,33 @@ $('#btnLoadModels').onclick = async () => {
     panel.innerHTML = '';
     if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, serverKey ? 'Pakai daftar di dropdown.' : '0 model via API.'))); return; }
     models.slice(0, 100).forEach(m => {
-      const sel = $('#modelSelect');
-      if (!sel.querySelector('option[value="' + m.id + '"]')) sel.append(el('option', { value: m.id }, m.id));
+      const trigger = $('#modelTrigger');
+      const label = (PROVIDERS[p].modelLabels && PROVIDERS[p].modelLabels[m.id]) || m.id;
+      if (!$('#modelPopup').querySelector('.mopt[data-mid="' + m.id + '"]')) {
+        const opt = el('button', { class: 'mopt' + (state.models[p] === m.id ? ' sel' : ''), 'data-mid': m.id }, label);
+        opt.onclick = (e) => {
+          e.stopPropagation();
+          state.models[p] = m.id;
+          trigger.textContent = label;
+          $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
+          opt.classList.add('sel');
+          $('#modelPopup').classList.add('hidden');
+          autoSave();
+        };
+        $('#modelPopup').append(opt);
+      }
       panel.append(el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || '')));
     });
   } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
 };
-$('#modelSelect').onchange = () => { state.models[state.provider] = $('#modelSelect').value; autoSave(); };
+$('#modelTrigger').onclick = (e) => {
+  e.stopPropagation();
+  $('#modelPopup').classList.toggle('hidden');
+};
+document.addEventListener('click', (e) => {
+  const popup = $('#modelPopup');
+  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.rb-model')) popup.classList.add('hidden');
+});
 
 /* ---------- params ---------- */
 $('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
@@ -423,7 +462,7 @@ $('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt
 /* ---------- run ---------- */
 async function runEditor() {
   const p = state.provider;
-  const model = $('#modelSelect').value;
+  const model = state.models[state.provider] || '';
   const keys = state.keys[p].map(k => k.value).filter(Boolean);
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih model', 'err');
