@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TL Editor — Penyunting Terjemahan Komik EN → ID (AI)</title>
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Editor terjemahan komik/manhua/manhwa & light novel bahasa Inggris ke Indonesia, ditenagai AI. Frontend Cloudflare Pages + backend Cloudflare Worker." />
+  <!-- Fonts: Inter (UI) + JetBrains Mono (naskah). Di-cache lokal oleh CSP. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='14' fill='white' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- ===== HEADER ===== -->
+  <header class="app-bar">
+    <div class="bar-left">
+      <div class="mark" aria-hidden="true">
+        <span class="mark-icon">&#x2139; TL</span>
+        <span class="ping"></span>
+      </div>
+      <div class="brand">
+        <span class="brand-title">TL Editor</span>
+        <span class="brand-badge">PRO</span>
+        <span class="brand-sub">EN &rarr; ID &bull; Komik &amp; Light Novel</span>
+      </div>
+    </div>
+    <div class="bar-right">
+      <div class="chip chip-status" id="workerStatusChip" title="Status koneksi ke Worker">
+        <span class="dot"></span><span id="workerStatusText">Memuat&hellip;</span>
+      </div>
+      <button class="icon-btn" id="btnSettings" title="Pengaturan &amp; koneksi">&#9881;</button>
+      <button class="icon-btn" id="btnLock" title="Kunci / Hapus key dari memori">&#128274;</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- ===== LEFT RAIL ===== -->
+    <aside class="rail">
+      <button class="rail-item active" data-view="editor" title="Editor">
+        <span class="ico">&#9998;</span><span class="rail-label">Editor</span>
+      </button>
+      <button class="rail-item" data-view="results" title="Hasil">
+        <span class="ico">&#128196;</span><span class="rail-label">Hasil</span>
+      </button>
+      <button class="rail-item" data-view="models" title="Model &amp; Provider">
+        <span class="ico">&#9709;</span><span class="rail-label">Model</span>
+      </button>
+      <button class="rail-item" data-view="guide" title="Panduan">
+        <span class="ico">&#9432;</span><span class="rail-label">Panduan</span>
+      </button>
+      <div class="rail-spacer"></div>
+      <button class="rail-item" data-view="security" title="Keamanan">
+        <span class="ico">&#128737;</span><span class="rail-label">Keamanan</span>
+      </button>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main">
+      <!-- VIEW: EDITOR -->
+      <section id="view-editor" class="view">
+        <div class="split">
+          <!-- LEFT: source file -->
+          <div class="panel source-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="panel-ico">&#60;/&gt;</span>
+                <h2>File Terjemahan</h2>
+                <span class="mini-badge" id="sourceMeta">—</span>
+              </div>
+              <div class="seg-tabs" role="tablist">
+                <button class="seg-tab active" data-srctab="paste">Tempel</button>
+                <button class="seg-tab" data-srctab="upload">Unggah .txt</button>
+                <button class="seg-tab" data-srctab="source">Sumber ID</button>
+              </div>
+            </div>
+
+            <div class="src-tools">
+              <button class="ghost-btn" id="btnSample">&#128203; Contoh Naskah</button>
+              <button class="ghost-btn" id="btnNormalize">🧹 Normalisasi</button>
+              <button class="ghost-btn" id="btnClearSource">🗑 Bersihkan</button>
+              <label class="check"><input type="checkbox" id="lineNumbers" checked /><span>Baris</span></label>
+            </div>
+
+            <div class="src-area" id="srcArea">
+              <div class="linegutter" id="lineGutter"></div>
+              <div>
+                <textarea id="txtPaste" class="src-textarea" spellcheck="false" placeholder="Tempel file hasil terjemahan (.txt) di sini&hellip;&#10;&#10;P1&#10;- Contoh dialog&hellip;"></textarea>
+                <input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden />
+                <div id="uploadHint" class="hidden">
+                  <button class="ghost-btn" id="btnChooseFile">Pilih file .txt</button>
+                  <span class="muted">atau drag &amp; drop ke sini</span>
+                </div>
+                <textarea id="txtSource" class="src-textarea hidden" spellcheck="false"
+                  placeholder="Teks sumber bahasa Inggris (opsional, referensi ketepatan makna)&hellip;"></textarea>
+              </div>
+            </div>
+
+            <div class="src-status">
+              <span class="stat" id="statLines">0 baris</span>
+              <span class="stat" id="statPages">0 halaman</span>
+              <span class="stat" id="statChars">0 karakter</span>
+              <span class="stat accent" id="statTokens">~0 token</span>
+            </div>
+          </div>
+
+          <!-- RIGHT: provider + run -->
+          <div class="panel config-panel">
+            <div class="card">
+              <div class="card-head">
+                <h3>Provider AI</h3>
+                <span class="live-dot" id="lbDot"></span>
+                <span class="mini-badge" id="lbNote">Load balancing</span>
+              </div>
+
+              <label class="field-label">Pilih Provider</label>
+              <div class="provider-pills" id="providerPills"></div>
+
+              <!-- API keys -->
+              <div class="keybox">
+                <div class="keybox-head">
+                  <span class="ktitle">API Key</span>
+                  <span class="mini-badge" id="keyCount">0 aktif</span>
+                  <span class="ksub" id="keyEncryptionNote">AES-GCM, di-kunci passphrase</span>
+                </div>
+                <div id="keyList" class="key-list"></div>
+                <div class="key-actions">
+                  <button class="ghost-btn add" id="btnAddKey">+ Tambah Key</button>
+                  <button class="ghost-btn" id="btnPingAll">&#8635; Ping All</button>
+                </div>
+                <div id="pingResults" class="ping-results hidden"></div>
+              </div>
+
+              <!-- Cloudflare account id (only for cloudflare) -->
+              <div id="cfAccountWrap" class="hidden">
+                <label class="field-label">Cloudflare Account ID (opsional)</label>
+                <input id="cfAccountId" class="input" placeholder="kosongkan = pakai [ai] binding server" autocomplete="off" spellcheck="false" />
+                <p class="hint">Kosongkan untuk memakai <code>[ai]</code> binding di Worker (tanpa token, kuota akun owner). Isi Account ID + API Token untuk BYOK per-user.</p>
+              </div>
+
+              <!-- Custom provider fields -->
+              <div id="customWrap" class="hidden">
+                <label class="field-label">Base URL (OpenAI-compatible, HTTPS)</label>
+                <input id="customBaseUrl" class="input" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
+                <label class="field-label">Format API</label>
+                <div class="seg-tabs">
+                  <button class="seg-tab" data-cf="openai">OpenAI</button>
+                  <button class="seg-tab" data-cf="gemini">Gemini</button>
+                </div>
+              </div>
+
+              <!-- Model -->
+              <div class="model-row">
+                <label class="field-label" for="modelInput">Model</label>
+                <button class="ghost-btn" id="btnLoadModels" title="Ambil daftar model dari provider">&#10227; Load Models</button>
+              </div>
+              <div class="model-controls">
+                <input id="modelInput" class="input model-input" list="modelOptions" placeholder="pilih / ketik model" autocomplete="off" spellcheck="false" />
+                <datalist id="modelOptions"></datalist>
+              </div>
+              <div id="modelListPanel" class="model-list hidden"></div>
+
+              <!-- params -->
+              <div class="params">
+                <div class="param">
+                  <div class="param-top"><span>Temperature</span><output id="tempVal">0.2</output></div>
+                  <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" />
+                  <p class="hint">Rendah = konsisten &amp; harfiah; tinggi = kreatif.</p>
+                </div>
+                <div class="param">
+                  <div class="param-top"><span>Max Output Tokens</span><output id="maxTokVal">8192</output></div>
+                  <div class="preset-row">
+                    <button class="preset" data-max="2048">2K</button>
+                    <button class="preset" data-max="8192">8K</button>
+                    <button class="preset" data-max="16384">16K</button>
+                    <button class="preset" data-max="32768">32K</button>
+                  </div>
+                  <input id="maxTokens" type="number" class="input" value="8192" min="256" max="32768" step="256" />
+                </div>
+              </div>
+
+              <button class="btn-primary run" id="btnRun">&#9654; Proses Editor</button>
+              <div class="run-hint"><span>&#8984; / Ctrl + Enter untuk eksekusi</span><span id="runTimer" class="hidden"></span></div>
+            </div>
+
+            <!-- SYSTEM PROMPT -->
+            <div class="card">
+              <div class="card-head">
+                <h3>System Prompt</h3>
+                <button class="ghost-btn tiny" id="btnTogglePrompt">Perinci</button>
+              </div>
+              <div class="prompt-summary" id="promptSummary">
+                Aturan bawaan <strong>Indonesian Translation Editor</strong>: prioritas makna &rarr; typo &rarr; naturalitas &rarr; efisiensi;
+                pertahankan struktur file, penanda halaman, istilah Inggris &amp; kata ganti; output 3 bagian
+                (Hasil, Perubahan, Perlu Dicek).
+              </div>
+              <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10"></textarea>
+              <div class="prompt-tools">
+                <button class="ghost-btn tiny" id="btnReloadPrompt">Muat ulang bawaan</button>
+                <button class="ghost-btn tiny" id="btnResetPrompt">Atur ulang ke bawaan</button>
+                <span class="muted" id="promptChars"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: RESULTS -->
+      <section id="view-results" class="view hidden">
+        <div class="results-head">
+          <div>
+            <h2>Hasil Penyuntingan</h2>
+            <div class="run-meta" id="runMeta"><span class="muted">Belum ada hasil. Jalankan editor dulu.</span></div>
+          </div>
+          <div class="results-actions">
+            <button class="ghost-btn" id="btnCopyResult">&#128203; Salin Naskah (.txt)</button>
+            <button class="ghost-btn" id="btnDownloadResult">&#11015; Unduh .txt</button>
+            <button class="ghost-btn" id="btnDownloadAll">Unduh Semua (3 bagian)</button>
+          </div>
+        </div>
+
+        <div class="res-tabs">
+          <button class="res-tab active" data-res="hasil"><span>Hasil</span><em id="cntHasil">0</em></button>
+          <button class="res-tab" data-res="perubahan"><span>Perubahan</span><em id="cntPerubahan">0</em></button>
+          <button class="res-tab warn" data-res="dicek"><span>Perlu Dicek &zwj;⚠️</span><em id="cntDicek">0</em></button>
+          <button class="res-tab" data-res="raw"><span>Raw</span><em id="cntRaw">—</em></button>
+        </div>
+
+        <div class="res-body">
+          <div class="res-pane" data-res="hasil">
+            <div class="res-pane-tools">
+              <label class="check"><input type="checkbox" id="diffMode" /><span>Tonjolkan baris berubah (diff)</span></label>
+              <span class="muted" id="hasilNote"></span>
+            </div>
+            <pre class="mono-output" id="resultHasil"><code>Belum ada hasil.</code></pre>
+          </div>
+
+          <div class="res-pane hidden" data-res="perubahan">
+            <div id="resultPerubahan" class="cards"><div class="empty">Belum ada hasil.</div></div>
+          </div>
+
+          <div class="res-pane hidden" data-res="dicek">
+            <div id="resultDicek" class="cards"><div class="empty">Belum ada hasil.</div></div>
+          </div>
+
+          <div class="res-pane hidden" data-res="raw">
+            <pre class="mono-output"><code id="resultRaw">Belum ada hasil.</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: MODELS / PROVIDERS catalog -->
+      <section id="view-models" class="view hidden">
+        <div class="card wide">
+          <div class="card-head"><h3>Daftar Provider &amp; Model</h3><span class="mini-badge">load saat pakai</span></div>
+          <p class="muted">Pilih provider, isi API key di panel Editor, lalu klik <strong>Load Models</strong>. Di bawah ini ringkasan endpoint &amp; model rekomendasi bawaan.</p>
+          <div id="providerCatalog" class="catalog"></div>
+        </div>
+      </section>
+
+      <!-- VIEW: GUIDE -->
+      <section id="view-guide" class="view hidden">
+        <div class="card wide guide-body">
+          <h2>Panduan Singkat</h2>
+          <ol>
+            <li>Tempel / unggah file hasil terjemahan (.txt) di panel kiri. Opsional: tempel sumber bahasa Inggris.</li>
+            <li>Pilih provider di kanan, tambahkan 1+ API key (multi-key = load balancing otomatis saat limit/rate).</li>
+            <li>Klik <strong>Load Models</strong> untuk menarik daftar model provider, lalu pilih model.</li>
+            <li>Set temperature &amp; max output tokens, lalu <strong>&#9654; Proses Editor</strong>.</li>
+            <li>Hasil muncul di tab <strong>Hasil / Perubahan / Perlu Dicek</strong>. Salin atau unduh .txt.</li>
+          </ol>
+          <p class="muted">Instruksi detail deploy &amp; keamanan ada di <code>GUIDE.md</code> di repo.</p>
+        </div>
+      </section>
+
+      <!-- VIEW: SECURITY -->
+      <section id="view-security" class="view hidden">
+        <div class="card wide">
+          <div class="card-head"><h3>Keamanan API Key</h3><span class="mini-badge" id="vaultState">belum dibuka</span></div>
+          <p class="muted">Key disimpan <strong>terenkripsi AES-GCM</strong> di perangkat, di-kunci dengan passphrase (PBKDF2). Plaintext hanya ada di memori selama sesi.</p>
+
+          <div class="sec-field">
+            <label class="field-label">Mode Penyimpanan</label>
+            <div class="seg-tabs" id="storageMode">
+              <button class="seg-tab active" data-mode="device">Simpan di perangkat (enkripsi)</button>
+              <button class="seg-tab" data-mode="session">Hanya sesi (jangan simpan)</button>
+            </div>
+          </div>
+
+          <div id="vaultUnlockWrap">
+            <label class="field-label" for="unlockPass">Passphrase (untuk membuka kunci vault)</label>
+            <div class="pass-row">
+              <input id="unlockPass" class="input" type="password" autocomplete="off" placeholder="passphrase&hellip;" />
+              <button class="ghost-btn" id="btnUnlock">Buka Kunci</button>
+            </div>
+            <p class="hint">Untuk perangkat baru / setelah browser reset, masukkan passphrase yang sama untuk memuat key.</p>
+          </div>
+
+          <div class="sec-tools">
+            <button class="ghost-btn" id="btnRotateSecret">Ubah Gateway Secret</button>
+            <button class="ghost-btn danger" id="btnWipeVault">Hapus Semua Key &amp; Kunci Vault</button>
+          </div>
+
+          <div class="sec-checklist">
+            <h4>Pemeriksaan Keamanan yang Aktif</h4>
+            <ul id="secChecklist"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- SETTINGS / CONNECTION modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Pengaturan &amp; Koneksi</h3><button class="icon-btn" id="modalClose">&times;</button></div>
+      <label class="field-label">URL Worker (backend)</label>
+      <input id="workerUrl" class="input" placeholder="(kosongkan = same-origin /api)" autocomplete="off" spellcheck="false" />
+      <p class="hint">Biarkan kosong bila frontend &amp; worker di-host di domain yang sama (deploy Worker + assets). Isi URL worker bila terpisah (Pages + Worker).</p>
+
+      <label class="field-label">Gateway Secret (opsional)</label>
+      <input id="gatewaySecretInput" class="input" type="password" placeholder="wajib jika worker mengaktifkan GATEWAY_SECRET" autocomplete="off" spellcheck="false" />
+      <p class="hint">Secret bersama. Worker membandingkan dengan <code>X-TL-Gateway</code>. Jika tidak diisi, request dikirim terbuka (masih tetap rate-limit &amp; HTTPS).</p>
+
+      <label class="field-label">Worker / Koneksi status</label>
+      <button class="ghost-btn" id="btnCheckConn">Uji Koneksi Worker</button>
+
+      <div class="modal-foot">
+        <button class="ghost-btn" id="modalCancel">Batal</button>
+        <button class="btn-primary" id="modalSave">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- passphrase first-use modal -->
+  <div id="passModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Aman Kunci API Key</h3></div>
+      <p class="muted">Passphrase ini dipakai untuk mengenkripsi (AES-GCM) semua API key di perangkat. <strong>Tidak bisa dipulihkan</strong> bila lupa.</p>
+      <input id="pass1" class="input" type="password" placeholder="Passphrase (min. 8 karakter)" autocomplete="off" />
+      <input id="pass2" class="input" type="password" placeholder="Ulangi passphrase" autocomplete="off" />
+      <div class="modal-foot">
+        <button class="ghost-btn" id="passSkip">Lewati (hanya sesi ini)</button>
+        <button class="btn-primary" id="passCreate">Kunci &amp; Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <footer class="app-footer">
+    <span class="shield">&#128737; Local-only &bull; API key dikirim terenkripsi (TLS) ke Worker</span>
+    <span class="muted">TL Editor &bull; Cloudflare Pages + Worker</span>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>

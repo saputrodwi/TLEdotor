@@ -1,0 +1,16 @@
+{
+  "name": "tl-editor-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend proxy for the TL Editor (Cloudflare Worker). Serves static frontend + /api AI gateway.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "test": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

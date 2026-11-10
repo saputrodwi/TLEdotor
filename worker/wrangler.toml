@@ -1,0 +1,35 @@
+# TL Editor — Cloudflare Worker (API-only backend).
+#
+# This is the Ocrku pattern:
+#   - The Worker has NO public URL (workers_dev = false). It is reached only
+#     through a Pages Service Binding named TL_WORKER.
+#   - The static frontend is served by Cloudflare Pages (build output = frontend/).
+#   - Pages Functions in functions/api/[[path]].js proxy /api/* to this Worker.
+#
+# Deploy order (dashboard):
+#   1) Import this repo → Worker, Root directory: worker, Name: tl-editor-worker.
+#   2) Connect the same repo → Pages, Root: (empty), Build command: (empty),
+#      Build output directory: frontend.
+#   3) Pages → Settings → Bindings → Add → Service binding:
+#         Variable name: TL_WORKER   Service: tl-editor-worker
+#   4) Retry the Pages deployment so the binding goes live.
+
+name = "tl-editor-worker"
+main = "index.js"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# No public URL — accessed only via the Pages service binding.
+workers_dev = false
+
+[vars]
+# Set GATEWAY_SECRET as a Cloudflare Secret (wrangler secret put GATEWAY_SECRET),
+# not here, to keep it out of the repo. Empty = open (local dev).
+MAX_TEXT_BYTES = "400000"
+RATE_LIMIT_EDIT = "30"
+RATE_LIMIT_OTHER = "60"
+
+# Cloudflare Workers AI binding: lets the cloudflare provider run via
+# env.AI.run(model, ...) with no account id / API token (free 10k neurons/day).
+[ai]
+binding = "AI"
