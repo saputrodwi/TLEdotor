@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' fill='white' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=6" />
+  <link rel="stylesheet" href="./styles.css?v=7" />
 </head>
 <body>
   <header class="topbar">
@@ -75,11 +75,14 @@
         <div class="rb-line rb-bottom">
           <div class="rp-mini"><span>Temp</span><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" /><output id="tempVal">0.2</output></div>
           <div class="rp-mini"><span>Tokens</span><input id="maxTokens" type="number" class="mono" value="8192" min="256" max="32768" step="256" /></div>
-          <button id="btnRun" class="btn-primary run">Jalankan</button>
+          <button id="btnRun" class="btn-primary run"><span id="runBtnLabel">Jalankan</span></button>
         </div>
+        <div class="run-progress" id="runProgress"><i></i></div>
       </div>
 
-      <!-- results: clean -->
+      <div class="run-status hidden" id="runStatus" role="status"><span class="spinner hidden" id="runSpinner"></span><span id="runStatusTxt"></span></div>
+
+      <!-- results: Ocrku-style (Hasil + Perubahan + Perlu dicek) -->
       <div class="card results hidden" id="resultsCard">
         <div class="res-header">
           <b>Hasil</b>
@@ -88,6 +91,18 @@
           <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
         </div>
         <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik "Jalankan" dulu.</code></pre>
+
+        <div class="res-header res-sep">
+          <b>Perubahan</b>
+          <span class="mini-badge" id="chgBadge">0</span>
+        </div>
+        <div class="list-scroll" id="resultChanges"><div class="empty-note">Belum ada hasil.</div></div>
+
+        <div class="res-header res-sep">
+          <b>Perlu dicek</b>
+          <span class="mini-badge warn" id="revBadge">0</span>
+        </div>
+        <div class="list-scroll" id="resultReview"><div class="empty-note">Belum ada hasil.</div></div>
       </div>
     </section>
 
@@ -159,6 +174,6 @@
 
   <div id="toast" class="toast hidden"></div>
   <footer class="app-footer"></footer>
-  <script src="./app.js?v=6"></script>
+  <script src="./app.js?v=7"></script>
 </body>
 </html>

@@ -471,8 +471,14 @@ async function runEditor() {
   if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom', 'err');
   if (!text.trim()) return toast('File terjemahan kosong', 'err');
 
-  const btn = $('#btnRun'); btn.disabled = true;
+  const btn = $('#btnRun');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  setRunLoading(true);
   const t0 = performance.now();
+  const tick = setInterval(() => {
+    $('#runStatusTxt').textContent = 'Menyunting… ' + Math.max(1, Math.round((performance.now() - t0) / 1000)) + ' dtk';
+  }, 400);
   try {
     const body = {
       provider: p, model, keys,
@@ -485,14 +491,32 @@ async function runEditor() {
     const r = await apiCall('/api/edit', body);
     state.lastResult = r.raw;
     state.lastRun = { provider: p, model, ms: Math.round(performance.now() - t0), usage: r.usage, keyUsed: r.keyUsed, keyCount: r.keyCount };
-    renderResults(r.raw, state.lastRun);
-    toast('Selesai (' + state.lastRun.ms + ' ms)', 'ok');
+    const c = renderResults(r.raw, state.lastRun);
+    setRunStatus('ok', 'Selesai (' + state.lastRun.ms + ' ms) · ' + c.chg + ' perubahan · ' + c.rev + ' perlu dicek');
   } catch (e) {
-    toast('Gagal: ' + (e.message || e), 'err');
+    setRunStatus('error', 'Gagal: ' + (e.message || e));
   } finally {
+    clearInterval(tick);
+    setRunLoading(false);
     btn.disabled = false;
     autoSave();
   }
+}
+function setRunLoading(on) {
+  $('#runBtnLabel').textContent = on ? 'Menyunting…' : 'Jalankan';
+  $('#runProgress').classList.toggle('on', on);
+  $('#runSpinner').classList.toggle('hidden', !on);
+  if (on) {
+    $('#runStatus').classList.remove('hidden', 'ok', 'error');
+    $('#runStatusTxt').textContent = 'Menyunting…';
+  }
+}
+function setRunStatus(kind, txt) {
+  const s = $('#runStatus');
+  s.classList.remove('hidden');
+  s.classList.toggle('ok', kind === 'ok');
+  s.classList.toggle('error', kind === 'error');
+  $('#runStatusTxt').textContent = txt;
 }
 $('#btnRun').onclick = runEditor;
 document.addEventListener('keydown', e => {
@@ -532,13 +556,64 @@ function splitSections(raw) {
   return { hasilText, perubSec, dicekSec };
 }
 
+function parseDiffEntries(sec) {
+  const s = String(sec || '').replace(/\r\n/g, '\n').trim();
+  if (!s) return [];
+  const cleaned = s.replace(/^BAGIAN\s*\d[^\n]*\n*/i, '').trim();
+  if (!cleaned || /^tidak ada\./i.test(cleaned) || /^tidak ada perubahan\./i.test(cleaned)) return [];
+  const blocks = cleaned.split(/\n+(?=\[[^\]\n]+\]\s*(?:\n|$))/).map(b => b.trim()).filter(Boolean);
+  return blocks.map(b => {
+    const e = {};
+    const m = b.match(/^\[([^\]\n]+)\]/);
+    e.loc = m ? m[1].trim() : '';
+    const body = m ? b.slice(m[0].length) : b;
+    let cur = null;
+    body.split('\n').forEach(line => {
+      const lm = line.match(/^(Sebelum|Sesudah|Alasan|Teks|Masalah|Saran)\s*:\s*(.*)$/i);
+      if (lm) { cur = lm[1].toLowerCase(); e[cur] = lm[2].trim(); }
+      else if (cur) { const t = line.trim(); if (t) e[cur] += '\n' + t; }
+    });
+    for (const k of ['sebelum','sesudah','alasan','teks','masalah','saran']) if (e[k] != null) e[k] = e[k].trim();
+    return e;
+  });
+}
+
+function renderDiffList(container, entries, kind) {
+  container.innerHTML = '';
+  if (!entries.length) {
+    container.append(el('div', { class: 'empty-note' }, kind === 'perubahan' ? 'Tidak ada perubahan.' : 'Tidak ada.'));
+    return;
+  }
+  entries.forEach(e => {
+    const d = el('div', { class: 'diff' });
+    if (e.loc) d.append(el('div', { class: 'loc' }, '[' + e.loc + ']'));
+    if (kind === 'perubahan') {
+      if (e.sebelum) d.append(el('div', { class: 'lbl' }, 'Sebelum'), el('div', { class: 'tx before' }, e.sebelum));
+      if (e.sesudah) d.append(el('div', { class: 'lbl' }, 'Sesudah'), el('div', { class: 'tx after' }, e.sesudah));
+      if (e.alasan) d.append(el('div', { class: 'why' }, e.alasan));
+    } else {
+      if (e.teks) d.append(el('div', { class: 'lbl' }, 'Teks'), el('div', { class: 'tx' }, e.teks));
+      if (e.masalah) d.append(el('div', { class: 'why' }, 'Masalah: ' + e.masalah));
+      if (e.saran) d.append(el('div', { class: 'why' }, 'Saran: ' + e.saran));
+    }
+    container.append(d);
+  });
+}
+
 function renderResults(raw, run) {
   const resultsCard = $('#resultsCard');
   if (resultsCard) resultsCard.classList.remove('hidden');
-  const { hasilText } = splitSections(raw);
+  const { hasilText, perubSec, dicekSec } = splitSections(raw);
   const pre = $('#resultHasil');
   pre.innerHTML = '<code>' + highlightResult(hasilText) + '</code>';
   window._hasilText = hasilText;
+  const chg = parseDiffEntries(perubSec);
+  const rev = parseDiffEntries(dicekSec);
+  $('#chgBadge').textContent = String(chg.length);
+  $('#revBadge').textContent = String(rev.length);
+  renderDiffList($('#resultChanges'), chg, 'perubahan');
+  renderDiffList($('#resultReview'), rev, 'perlu');
+  return { chg: chg.length, rev: rev.length };
 }
 
 /* ---------- copy / download ---------- */
