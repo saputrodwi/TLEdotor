@@ -630,7 +630,7 @@ function updateSecChecklist() {
     ['Key multi per-provider', true],
     ['Vault terenkripsi (AES-GCM + PBKDF2)', state.storageMode === 'device' ? state.unlocked : false],
     ['Plaintext hanya di memori', true],
-    ['[ai] binding Worker (Cloudflare)', false],
+    ['Server key (Default provider)', state.provider === 'default'],
   ];
   const ul = $('#secChecklist'); ul.innerHTML = '';
   items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '\u2713 ' : '\u25cb ') + label)));
