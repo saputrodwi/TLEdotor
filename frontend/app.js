@@ -358,7 +358,7 @@ function normalizeText(t) {
     .replace(/[ \t]+(\n)/g, '$1');
 }
 $('#btnNormalize').onclick = () => { const t = normalizeText($('#txtPaste').value); $('#txtPaste').value = t; updateSourceStats(); toast('Dinormalisasi', 'ok'); };
-$('#btnClearSource').onclick = () => { $('#txtPaste').value = ''; $('#txtSource').value = ''; updateSourceStats(); };
+$('#btnClearSource').onclick = () => { $('#txtPaste').value = ''; updateSourceStats(); };
 $('#btnSample').onclick = async () => {
   try { const r = await apiCall('/api/sample', null, 'GET'); $('#txtPaste').value = r.sample; updateSourceStats(); toast('Contoh naskah dimuat', 'ok'); }
   catch { toast('Gagal memuat contoh', 'err'); }
@@ -476,7 +476,7 @@ async function runEditor() {
   try {
     const body = {
       provider: p, model, keys,
-      text, sourceText: $('#txtSource').value,
+      text,
       systemPrompt: $('#systemPrompt').value,
       temperature: state.temperature, maxOutputTokens: state.maxTokens,
       strategy: 'round-robin',

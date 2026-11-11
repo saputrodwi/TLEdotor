@@ -372,9 +372,6 @@ async function handleEdit(req, env) {
   if (text.length === 0) throw httpError(400, 'EMPTY_TEXT', 'Isi file terjemahan (.txt) kosong');
   if (text.length > maxText) throw httpError(413, 'TEXT_TOO_LONG', 'File terlalu besar (maks ' + maxText + ' karakter)');
 
-  const sourceText = String(body.sourceText || '');
-  if (sourceText.length > maxText) throw httpError(413, 'SOURCE_TOO_LONG', 'Sumber Inggris terlalu besar');
-
   let system = String(body.systemPrompt || '').trim();
   if (!system) system = env.DEFAULT_SYSTEM_PROMPT || SYSTEM_PROMPT_FALLBACK;
   if (system.length > 60000) throw httpError(413, 'PROMPT_TOO_LONG', 'System prompt terlalu panjang');
@@ -402,7 +399,7 @@ async function handleEdit(req, env) {
   }
 
   // build the user message
-  const userMsg = assembleUserMessage(text, sourceText, body.continueFromPage);
+  const userMsg = assembleUserMessage(text, body.continueFromPage);
 
   const timeoutMs = 180_000; // 3 minutes
 
@@ -469,7 +466,7 @@ async function dispatch(o) {
   return callOpenAI({ baseUrl, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
 }
 
-function assembleUserMessage(text, sourceText, continueFromPage) {
+function assembleUserMessage(text, continueFromPage) {
   let parts = [];
   parts.push('# PERMINTAAN EDITOR');
   parts.push('Berikut adalah file naskah terjemahan (bahasa Indonesia) yang perlu kamu sunting. Ikuti seluruh aturan system prompt dan kembalikan hasil dalam tiga bagian (HASIL, PERUBAHAN, PERLU DICEK).');
@@ -481,13 +478,6 @@ function assembleUserMessage(text, sourceText, continueFromPage) {
   parts.push('```txt');
   parts.push(text);
   parts.push('```');
-  if (sourceText) {
-    parts.push('');
-    parts.push('# SUMBER BAHASA INGGRIS (referensi ketepatan makna, jANGAN dioutput)');
-    parts.push('```txt');
-    parts.push(sourceText);
-    parts.push('```');
-  }
   parts.push('');
   parts.push('Mulai. Jangan menambah komentar di luar format tiga bagian.');
   return parts.join('\n');
