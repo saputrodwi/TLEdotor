@@ -161,18 +161,22 @@ $$('#themeSeg .seg-tab').forEach(b => b.onclick = () => { state.theme = b.datase
 try { state.theme = localStorage.getItem(LS_THEME) || 'system'; } catch { /* default */ }
 applyTheme();
 
-/* ---------- tab switching ---------- */
+/* ---------- view switching (Sunting utama, Pengaturan drawer) ---------- */
 function switchView(name) {
-  $$('.view').forEach(v => v.classList.add('hidden'));
-  const target = document.getElementById('view-' + name);
-  if (target) target.classList.remove('hidden');
-  $$('.nav-item').forEach(t => t.classList.toggle('active', t.dataset.view === name));
-  const main = document.querySelector('.workspace');
-  if (main) main.scrollTo({ top: 0, behavior: 'auto' });
+  const sunting = $('#view-sunting');
+  const settings = $('#view-pengaturan');
+  if (sunting) sunting.classList.add('active');
+  if (settings) settings.classList.toggle('active', name === 'pengaturan');
+  document.body.classList.toggle('settings-open', name === 'pengaturan');
+  if (name === 'pengaturan') window.scrollTo({ top: 0, behavior: 'auto' });
 }
-$$('.nav-item').forEach(t => t.onclick = () => switchView(t.dataset.view));
-$('#btnToSettings').onclick = () => switchView('pengaturan');
-$('#btnBackSunting').onclick = () => switchView('sunting');
+if ($('#btnOpenSettings')) $('#btnOpenSettings').onclick = () => switchView('pengaturan');
+if ($('#btnToSettings')) $('#btnToSettings').onclick = () => switchView('pengaturan');
+if ($('#btnBackSunting')) $('#btnBackSunting').onclick = () => switchView('sunting');
+$$('[data-close-settings]').forEach(el => el.addEventListener('click', () => switchView('sunting')));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('settings-open')) switchView('sunting');
+});
 
 /* ---------- provider tiles ---------- */
 function renderProviderTiles() {
@@ -204,7 +208,9 @@ function syncProviderUI() {
   const cu = $('#customBaseUrl');
   if (cu) cu.value = state.custom.baseUrl;
   $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
-  $('#runProviderLabel').textContent = p.label;
+  const cm = $('#customModel');
+  if (cm) cm.value = state.models.custom || '';
+  if ($('#runProviderLabel')) $('#runProviderLabel').textContent = p.label;
 }
 
 /* ---------- model select ---------- */
@@ -240,7 +246,7 @@ $('#modelTrigger').onclick = (e) => {
 };
 document.addEventListener('click', (e) => {
   const popup = $('#modelPopup');
-  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.rb-model')) popup.classList.add('hidden');
+  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.model-control')) popup.classList.add('hidden');
 });
 
 /* ---------- keys UI (ringkas, plaintext) ---------- */
@@ -289,6 +295,21 @@ function renderKeyCard() {
       state.custom.format = b.dataset.cf;
       syncProviderUI(); autoSave();
     });
+    wrap.append(el('label', { class: 'field-label' }, 'Model (isi manual atau Muat)'));
+    const modelInp = el('input', {
+      id: 'customModel',
+      class: 'input',
+      placeholder: 'nama-model',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      value: state.models.custom || '',
+    });
+    modelInp.addEventListener('input', () => {
+      state.models.custom = modelInp.value.trim();
+      renderModelSelect();
+      autoSave();
+    });
+    wrap.append(modelInp);
     box.append(wrap);
   }
 
@@ -339,20 +360,25 @@ function updateSourceStats() {
   const t = $('#txtPaste').value;
   const lines = t ? t.split('\n').filter(x => x.length).length : 0;
   const pages = (t.match(/^\s*P\d+/gm) || []).length;
-  $('#srcBadge').textContent = lines + ' baris';
-  $('#statPages').textContent = pages + ' halaman';
-  $('#statChars').textContent = t.length.toLocaleString('en-US') + ' karakter';
-  $('#statTokens').textContent = '~' + Math.round(t.length / 3.5).toLocaleString('en-US') + ' token';
+  if ($('#srcBadge')) $('#srcBadge').textContent = lines + ' baris';
+  if ($('#statPages')) $('#statPages').textContent = String(pages);
+  if ($('#statChars')) $('#statChars').textContent = t.length.toLocaleString('en-US');
+  if ($('#statTokens')) $('#statTokens').textContent = '~' + Math.round(t.length / 3.5).toLocaleString('en-US');
   updateLineNumbers();
 }
 function updateLineNumbers() {
   const g = $('#lineGutter');
+  if (!g) return;
   const n = $('#txtPaste').value.split('\n').length;
-  let s = ''; for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0') + '\n';
+  let s = '';
+  for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0') + '\n';
   g.textContent = s.trimEnd();
 }
 $('#txtPaste').addEventListener('input', updateSourceStats);
-$('#txtPaste').addEventListener('scroll', () => { $('#lineGutter').scrollTop = $('#txtPaste').scrollTop; });
+$('#txtPaste').addEventListener('scroll', () => {
+  const g = $('#lineGutter');
+  if (g) g.scrollTop = $('#txtPaste').scrollTop;
+});
 
 function normalizeText(t) {
   return t
@@ -591,13 +617,7 @@ function renderDiffList(container, entries, kind) {
   });
 }
 
-function switchResultTab(name) {
-  $$('.result-tab').forEach(b => b.classList.toggle('active', b.dataset.rtab === name));
-  $$('.result-pane').forEach(p => p.classList.toggle('active', p.id === 'panel' + name[0].toUpperCase() + name.slice(1)));
-}
 function renderResults(raw, run) {
-  const resultsCard = $('#resultsCard');
-  if (resultsCard) resultsCard.classList.remove('hidden');
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
   const pre = $('#resultHasil');
   pre.innerHTML = '<code>' + highlightResult(hasilText) + '</code>';
@@ -607,12 +627,14 @@ function renderResults(raw, run) {
   const hasilLines = hasilText ? hasilText.split('\n').filter(x => x.trim()).length : 0;
   const hasilBadge = $('#hasilBadge');
   if (hasilBadge) hasilBadge.textContent = String(hasilLines);
-  $('#chgBadge').textContent = String(chg.length);
-  $('#revBadge').textContent = String(rev.length);
+  const chgBadge = $('#chgBadge');
+  if (chgBadge) chgBadge.textContent = String(chg.length);
+  const revBadge = $('#revBadge');
+  if (revBadge) revBadge.textContent = String(rev.length);
   renderDiffList($('#resultChanges'), chg, 'perubahan');
   renderDiffList($('#resultReview'), rev, 'perlu');
-  if (window.innerWidth < 1080) {
-    setTimeout(() => { $('#resultsCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+  if (window.innerWidth < 1080 && $('#resultsCard')) {
+    setTimeout(() => $('#resultsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
   return { chg: chg.length, rev: rev.length };
 }
@@ -631,7 +653,6 @@ function download(name, text) {
 }
 $('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
-$$('.result-tab').forEach(b => b.onclick = () => switchResultTab(b.dataset.rtab));
 
 /* ---------- init ---------- */
 (async function init() {

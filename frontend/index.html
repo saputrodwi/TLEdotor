@@ -3,69 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TL Editor — Workbench</title>
-  <meta name="description" content="Workbench penyuntingan hasil terjemahan komik / light novel bahasa Indonesia. Editor AI, istilah Inggris dipertahankan, hasil siap difinalkan." />
+  <title>TL Editor — Lentera Studio</title>
+  <meta name="description" content="Lentera Studio: workbench penyuntingan hasil terjemahan komik / light novel bahasa Indonesia." />
   <meta name="theme-color" content="#0e0f13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ffb03a'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' fill='%230e0f13' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=9" />
-  <script src="./theme.js?v=9"></script>
+  <link rel="stylesheet" href="./styles.css?v=10" />
+  <script src="./theme.js?v=10"></script>
 </head>
-<body class="app-shell">
-  <aside class="rail" aria-label="Navigasi utama">
-    <div class="rail-brand">
-      <span class="mark">TL</span>
-      <div>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">TL</span>
+      <span class="brand-text">
         <strong>TL Editor</strong>
-        <small>workbench proofread</small>
-      </div>
+        <small>Lentera Studio</small>
+      </span>
     </div>
 
-    <nav class="rail-nav">
-      <button class="nav-item active" data-view="sunting" type="button">
-        <span class="nav-idx">01</span>
-        <span class="nav-label">Sunting</span>
-        <span class="nav-hint">source → hasil</span>
-      </button>
-      <button class="nav-item" data-view="pengaturan" type="button">
-        <span class="nav-idx">02</span>
-        <span class="nav-label">Pengaturan</span>
-        <span class="nav-hint">provider & model</span>
-      </button>
-    </nav>
-
-    <div class="rail-foot">
-      <button class="rail-theme" id="themeToggle" type="button" title="Siklus tema: sistem → terang → gelap">
-        <span id="themeIcon" class="theme-icon"></span>
-        <span id="themeLabel">Tema: sistem</span>
-      </button>
-      <p class="rail-note">Key BYOK disimpan di browser ini. Tidak pernah masuk log server.</p>
+    <div class="topbar-context">
+      <span class="eyebrow">Workspace</span>
+      <strong>Sunting</strong>
     </div>
-  </aside>
 
-  <main class="workspace">
-    <section id="view-sunting" class="view" aria-label="Sunting">
-      <header class="view-head">
-        <div>
-          <p class="eyebrow">Sunting</p>
-          <h1>Editor hasil terjemahan</h1>
-          <p class="lede">Tempel atau muat file .txt, jalankan penyuntingan AI, lalu finalkan lewat Hasil, Perubahan, dan Perlu dicek.</p>
-        </div>
-      </header>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btnOpenSettings" type="button" title="Buka Pengaturan" aria-label="Buka Pengaturan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"></circle>
+          <path d="M19 12a7 7 0 0 0-.3-1.8l2-1.5-2-3.4-2.2 1a7 7 0 0 0-3-1.7L13 2h-4l-.5 2.6a7 7 0 0 0-3 1.7l-2.2-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .6.1 1.2.3 1.8l-2 1.5 2 3.4 2.2-1a7 7 0 0 0 3 1.7L13 22h4l.5-2.6a7 7 0 0 0 3-1.7l2.2 1 2-3.4-2-1.5c.2-.6.3-1.2.3-1.8Z"></path>
+        </svg>
+      </button>
+      <button class="icon-btn" id="themeToggle" type="button" title="Siklus tema: sistem → terang → gelap" aria-label="Ganti tema">
+        <span id="themeIcon" class="theme-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </header>
 
-      <div class="editor-grid">
-        <section class="pane editor-pane" aria-label="Sumber terjemahan">
-          <div class="pane-head">
-            <h2>Sumber</h2>
-            <span class="badge" id="srcBadge">0 baris</span>
+  <main class="main">
+    <!-- ============ 01 SUNTING ============ -->
+    <section id="view-sunting" class="view active" aria-label="Sunting">
+      <div class="studio-grid">
+        <section class="panel source-panel" aria-label="Sumber terjemahan">
+          <div class="panel-head">
+            <div>
+              <h1>Sumber terjemahan</h1>
+              <p class="panel-sub">File .txt hasil terjemahan, siap disunting.</p>
+            </div>
+            <span class="pill" id="srcBadge">0 baris</span>
           </div>
 
-          <div class="editor-toolbar">
+          <div class="source-tools">
             <button class="btn-primary compact" id="btnChooseFile" type="button">
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3l3-3M2 13h12"/></svg>
-              Pilih .txt
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3l3-3M2 13h12"/></svg>
+              <span>Pilih .txt</span>
             </button>
             <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
             <button class="ghost-btn compact" id="btnSample" type="button">Contoh</button>
@@ -73,78 +65,100 @@
             <button class="ghost-btn compact danger" id="btnClearSource" type="button">Bersihkan</button>
           </div>
 
-          <div class="src-area" id="srcArea">
-            <div class="linegutter" id="lineGutter" aria-hidden="true"></div>
-            <textarea id="txtPaste" class="src-textarea" spellcheck="false" aria-label="Isi file terjemahan" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
-          </div>
-
-          <div class="editor-stats" aria-live="polite">
+          <div class="source-stats">
             <span><b id="statPages">0</b> halaman</span>
             <span><b id="statChars">0</b> karakter</span>
-            <span class="accent"><b id="statTokens">~0</b> token</span>
+            <span><b id="statTokens">~0</b> token</span>
           </div>
 
-          <div class="action-bar" aria-label="Jalankan penyuntingan">
-            <div class="action-field">
-              <span class="field-label">Provider</span>
-              <button class="action-value" id="btnToSettings" type="button">
+          <div class="editor" id="srcArea">
+            <div class="linegutter" id="lineGutter" aria-hidden="true"></div>
+            <textarea id="txtPaste" spellcheck="false" aria-label="Isi file terjemahan" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
+          </div>
+
+          <div class="action-bar" aria-label="Parameter dan jalankan">
+            <div class="action-group">
+              <span class="action-label">Provider</span>
+              <button class="action-select" id="btnToSettings" type="button">
                 <b id="runProviderLabel">Default</b>
                 <span>ubah</span>
               </button>
             </div>
-            <div class="action-field model-field">
-              <span class="field-label">Model</span>
+
+            <div class="action-group model-group">
+              <span class="action-label">Model</span>
               <div class="model-control">
                 <button class="model-trigger" id="modelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">Model B</button>
                 <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
                 <button class="ghost-btn tiny" id="btnLoadModels" type="button">Muat</button>
               </div>
             </div>
-            <div class="action-field">
-              <span class="field-label">Temp</span>
-              <div class="range-row">
+
+            <div class="action-group">
+              <span class="action-label">Temp</span>
+              <div class="temp-control">
                 <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" aria-label="Temperature" />
                 <output id="tempVal" for="temperature">0.50</output>
               </div>
             </div>
-            <div class="action-field tokens-field">
-              <span class="field-label">Tokens</span>
+
+            <div class="action-group">
+              <span class="action-label">Tokens</span>
               <input id="maxTokens" type="number" min="256" max="32768" step="256" value="8192" aria-label="Maks token" />
             </div>
+
             <button class="btn-primary run" id="btnRun" type="button">
               <span class="run-progress" id="runProgress" aria-hidden="true"><i></i></span>
-              <svg class="play" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+              <svg class="run-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
               <span id="runBtnLabel">Jalankan</span>
             </button>
           </div>
 
-          <div class="model-note-list" id="modelList" aria-live="polite"></div>
+          <div class="model-list" id="modelList" aria-live="polite"></div>
         </section>
 
-        <section class="pane results-pane" id="resultsCard" aria-label="Hasil penyuntingan">
-          <div class="pane-head results-head">
-            <h2>Hasil</h2>
-            <label class="check"><input type="checkbox" id="diffMode" checked /> diff</label>
-            <button class="ghost-btn tiny" id="btnCopyResult" type="button">Salin</button>
-            <button class="ghost-btn tiny" id="btnDownloadResult" type="button">Unduh .txt</button>
+        <section class="panel results-panel" id="resultsCard" aria-label="Hasil penyuntingan">
+          <div class="panel-head results-top">
+            <div>
+              <h1>Hasil</h1>
+              <p class="panel-sub">Tiga bagian di bawah sudah langsung terbuka. Tidak perlu klik lagi.</p>
+            </div>
+            <label class="check">
+              <input type="checkbox" id="diffMode" checked />
+              <span>diff</span>
+            </label>
+            <button class="ghost-btn compact" id="btnCopyResult" type="button">Salin</button>
+            <button class="ghost-btn compact" id="btnDownloadResult" type="button">Unduh .txt</button>
           </div>
 
-          <div class="result-tabs" role="tablist" aria-label="Lembar hasil">
-            <button class="result-tab active" data-rtab="hasil" type="button" role="tab">Hasil <span class="tab-count" id="hasilBadge">0</span></button>
-            <button class="result-tab" data-rtab="perubahan" type="button" role="tab">Perubahan <span class="tab-count" id="chgBadge">0</span></button>
-            <button class="result-tab" data-rtab="dicek" type="button" role="tab">Perlu dicek <span class="tab-count warn" id="revBadge">0</span></button>
-          </div>
+          <div class="result-stack">
+            <section class="result-section">
+              <div class="result-head">
+                <h2>Hasil akhir</h2>
+                <span class="pill" id="hasilBadge">0</span>
+              </div>
+              <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik “Jalankan” dulu. Hasil akhir akan muncul di sini dan bisa disalin langsung.</code></pre>
+            </section>
 
-          <div class="result-panes">
-            <div class="result-pane active" id="panelHasil" role="tabpanel">
-              <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik “Jalankan” dulu. Hasil akan muncul di sini sebagai teks final yang bisa disalin.</code></pre>
-            </div>
-            <div class="result-pane" id="panelPerubahan" role="tabpanel">
-              <div class="list-scroll" id="resultChanges"><div class="empty-note">Belum ada hasil.</div></div>
-            </div>
-            <div class="result-pane" id="panelDicek" role="tabpanel">
-              <div class="list-scroll" id="resultReview"><div class="empty-note">Belum ada hasil.</div></div>
-            </div>
+            <section class="result-section">
+              <div class="result-head">
+                <h2>Perubahan</h2>
+                <span class="pill" id="chgBadge">0</span>
+              </div>
+              <div class="result-list" id="resultChanges">
+                <div class="empty-note">Belum ada hasil.</div>
+              </div>
+            </section>
+
+            <section class="result-section warn">
+              <div class="result-head">
+                <h2>Perlu dicek</h2>
+                <span class="pill warn" id="revBadge">0</span>
+              </div>
+              <div class="result-list" id="resultReview">
+                <div class="empty-note">Belum ada hasil.</div>
+              </div>
+            </section>
           </div>
         </section>
       </div>
@@ -155,80 +169,86 @@
       </div>
     </section>
 
-    <section id="view-pengaturan" class="view hidden" aria-label="Pengaturan">
-      <header class="view-head settings-head">
+    <!-- ============ 02 PENGATURAN (drawer, bukan menu utama) ============ -->
+    <section id="view-pengaturan" class="view settings-drawer" aria-label="Pengaturan">
+      <div class="drawer-backdrop" data-close-settings></div>
+      <div class="drawer-sheet">
+      <div class="settings-head">
         <div>
-          <p class="eyebrow">Pengaturan</p>
-          <h1>Provider, kunci, dan gaya sunting</h1>
-          <p class="lede">Atur sumber model, system prompt, dan tampilan. Semua perubahan tersimpan di browser.</p>
+          <h1>Pengaturan</h1>
+          <p class="panel-sub">Provider, kunci, model, prompt, dan tampilan. Semua tersimpan lokal di browser.</p>
         </div>
         <button class="ghost-btn" id="btnBackSunting" type="button">← Sunting</button>
-      </header>
+      </div>
 
       <div class="settings-grid">
-        <article class="set-card span-2">
-          <div class="set-card-head">
+        <section class="settings-card span-2">
+          <div class="card-head">
             <h2>Provider</h2>
-            <p>Pilih sumber model yang akan dipakai oleh tombol Jalankan.</p>
+            <p>Pilih sumber model yang dipakai tombol Jalankan.</p>
           </div>
-          <div id="providerTiles" class="provider-tiles"></div>
-        </article>
+          <div class="provider-tiles" id="providerTiles"></div>
+        </section>
 
-        <article class="set-card span-2">
-          <div class="set-card-head">
+        <section class="settings-card span-2">
+          <div class="card-head">
             <h2>Kunci & model</h2>
-            <span class="badge" id="keyCount">0 kunci</span>
+            <span class="pill" id="keyCount">0 kunci</span>
           </div>
           <div id="keyCardBody"></div>
-          <div id="pingResults" class="ping-results hidden"></div>
-          <p class="sec-note" id="keyNote"><strong>Catatan:</strong> kunci tersimpan hanya di browser ini (localStorage) dan dikirim lewat HTTPS hanya ke Worker-mu. Provider <strong>Default</strong> memakai kunci di server — tanpa input apa pun.</p>
-        </article>
+          <div class="ping-results hidden" id="pingResults"></div>
+          <p class="note" id="keyNote">
+            Kunci BYOK disimpan plaintext di browser dan hanya dikirim lewat HTTPS ke Worker-mu.
+            Provider <b>Default</b> memakai kunci di server, tanpa input apa pun.
+          </p>
+        </section>
 
-        <article class="set-card">
-          <div class="set-card-head">
+        <section class="settings-card">
+          <div class="card-head">
             <h2>System Prompt</h2>
             <button class="ghost-btn tiny" id="btnTogglePrompt" type="button">Perinci</button>
           </div>
-          <p class="prompt-summary" id="promptSummary">Menyunting hasil terjemahan (bukan menerjemahkan ulang): makna → typo → naturalitas → efisiensi; pertahankan struktur, istilah Inggris & kata ganti; output 3 bagian.</p>
-          <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="12" aria-label="System prompt"></textarea>
+          <p class="prompt-summary" id="promptSummary">
+            Menyunting hasil terjemahan, bukan menerjemahkan ulang: makna → typo → naturalitas → efisiensi.
+            Struktur, istilah Inggris, dan kata ganti pengguna dipertahankan.
+          </p>
+          <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10" aria-label="System prompt"></textarea>
           <div class="prompt-tools">
             <button class="ghost-btn tiny" id="btnReloadPrompt" type="button">Muat bawaan</button>
             <button class="ghost-btn tiny" id="btnResetPrompt" type="button">Reset</button>
             <span class="muted" id="promptChars"></span>
           </div>
-        </article>
+        </section>
 
-        <article class="set-card">
-          <div class="set-card-head">
+        <section class="settings-card">
+          <div class="card-head">
             <h2>Tampilan</h2>
-            <p>Tema tersimpan di browser. “Sistem” mengikuti perangkat.</p>
+            <p>“Sistem” mengikuti preferensi perangkat.</p>
           </div>
           <div class="theme-seg" id="themeSeg">
             <button class="seg-tab active" data-tseg="system" type="button">Sistem</button>
             <button class="seg-tab" data-tseg="light" type="button">Terang</button>
             <button class="seg-tab" data-tseg="dark" type="button">Gelap</button>
           </div>
-          <div class="contrast-note">
-            <span class="swatch dark"></span> charcoal hangat + amber lampu meja
-            <span class="swatch light"></span> kertas terang + tinta hangat
-          </div>
-        </article>
+        </section>
 
-        <article class="set-card span-2">
-          <div class="set-card-head">
+        <section class="settings-card span-2">
+          <div class="card-head">
             <h2>Panduan singkat</h2>
           </div>
-          <ol class="guide-body">
-            <li><b>Di Sunting:</b> klik “Pilih .txt” atau tempel langsung. Nomor baris selalu tampil.</li>
-            <li><b>Jalankan:</b> hasil, perubahan, dan yang perlu dicek muncul di panel kanan.</li>
-            <li><b>Pengaturan:</b> ganti provider, kunci, model, atau system prompt.</li>
+          <ol class="guide">
+            <li><b>Contoh</b>: memuat contoh naskah ke editor.</li>
+            <li><b>Rapi</b>: menormalisasi spasi, tab, dan baris kosong.</li>
+            <li><b>Bersihkan</b>: menghapus isi editor.</li>
+            <li><b>Jalankan</b>: hasil, perubahan, dan yang perlu dicek langsung terbuka di panel Hasil.</li>
           </ol>
-        </article>
+        </section>
+      </div>
       </div>
     </section>
   </main>
 
   <div id="toast" class="toast hidden" role="status"></div>
-  <script src="./app.js?v=9"></script>
+  <script src="./app.js?v=10"></script>
 </body>
 </html>
