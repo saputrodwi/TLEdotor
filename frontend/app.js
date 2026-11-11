@@ -484,6 +484,59 @@ document.addEventListener('keydown', e => {
 
 /* Results */
 function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+/* Hasil akhir: kartu balon gaya Stitch (tag speaker + badan serif) */
+function renderHasilCards(text) {
+  const wrap = $('#hasilCards');
+  const pre = $('#resultHasil');
+  wrap.innerHTML = '';
+  if (!text) { wrap.hidden = true; pre.hidden = false; return; }
+  pre.hidden = true;
+  wrap.hidden = false;
+  const lines = text.split('\n');
+  const tagRe = /^\[([^\]]+)\]\s*(.*)$/;
+  const groups = [];
+  let cur = null;
+  lines.forEach(ln => {
+    if (!ln.trim() || /^\s*-{4,}\s*$/.test(ln)) {
+      if (cur) { groups.push(cur); cur = null; }
+      return;
+    }
+    const m = ln.match(tagRe);
+    if (m) {
+      if (cur) groups.push(cur);
+      const rest = m[2].trim();
+      const sp = rest.match(/^([A-Z][\wÀ-ɏ'.& ]{0,28}?):\s+(.+)$/s);
+      cur = { tag: '[' + m[1] + ']', extra: sp ? sp[1] : '', body: sp ? [sp[2]] : (rest ? [rest] : []) };
+    } else if (cur) {
+      cur.body.push(ln);
+    } else {
+      groups.push({ tag: '', extra: '', body: [ln], loose: true });
+    }
+  });
+  if (cur) groups.push(cur);
+  groups.forEach(g => {
+    const card = el('div', { class: 'hasil-card' + (g.loose || !g.tag ? ' loose' : '') });
+    if (g.tag) {
+      const head = el('div', { class: 'hasil-card-head' },
+        el('span', { class: 'hasil-tag' }, g.tag),
+        el('span', { class: 'hasil-loc' }, g.extra || '')
+      );
+      card.append(head);
+    }
+    const body = el('div', { class: 'hasil-body' });
+    g.body.filter(b => b.trim()).forEach(b => {
+      const isCm = /^\s*\/\//.test(b);
+      body.append(el('div', { class: 'hasil-line' + (isCm ? ' cm' : '') }, b));
+    });
+    card.append(body);
+    wrap.append(card);
+  });
+  if (!groups.length) {
+    const card = el('div', { class: 'hasil-card' }, el('div', { class: 'hasil-body' }, el('div', { class: 'hasil-line' }, text)));
+    wrap.append(card);
+  }
+}
 function highlightResult(text) {
   const src = $('#txtPaste').value.split('\n');
   return text.split('\n').map((ln, i) => {
@@ -533,25 +586,38 @@ function parseDiffEntries(sec) {
     return e;
   });
 }
+function dcRow(label, text, cls) {
+  return el('div', { class: 'dc-row' },
+    el('span', { class: 'dc-lbl ' + (cls || '') }, label),
+    el('span', { class: 'dc-text ' + (cls || '') }, text));
+}
 function renderDiffList(container, entries, kind) {
   container.innerHTML = '';
   if (!entries.length) {
     container.append(el('p', { class: 'empty' }, kind === 'perubahan' ? 'Tidak ada perubahan.' : 'Tidak ada.'));
     return;
   }
-  entries.forEach(e => {
-    const item = el('div', { class: 'diff-item' });
-    if (e.loc) item.append(el('div', { class: 'diff-loc' }, '[' + e.loc + ']'));
+  entries.forEach((e, i) => {
     if (kind === 'perubahan') {
-      if (e.sebelum) item.append(el('span', { class: 'diff-label' }, 'Sebelum'), el('span', { class: 'diff-text before' }, e.sebelum));
-      if (e.sesudah) item.append(el('span', { class: 'diff-label' }, 'Sesudah'), el('span', { class: 'diff-text after' }, e.sesudah));
-      if (e.alasan) item.append(el('div', { class: 'diff-why' }, e.alasan));
+      const item = el('div', { class: 'diff-item edit-card' });
+      const head = el('div', { class: 'dc-head' }, el('span', { class: 'dc-title' }, (i + 1) + '. Perbaikan leksikal'));
+      if (e.loc) head.append(el('span', { class: 'dc-loc' }, '[' + e.loc + ']'));
+      item.append(head);
+      if (e.sebelum) item.append(dcRow('Draf awal', e.sebelum, 'del'));
+      if (e.sesudah) item.append(dcRow('Revisi TL', e.sesudah, 'add'));
+      if (e.alasan) item.append(el('p', { class: 'dc-note' }, 'Kaidah: ' + e.alasan));
+      container.append(item);
     } else {
-      if (e.teks) item.append(el('span', { class: 'diff-label' }, 'Teks'), el('span', { class: 'diff-text' }, e.teks));
-      if (e.masalah) item.append(el('div', { class: 'diff-why' }, 'Masalah: ' + e.masalah));
-      if (e.saran) item.append(el('div', { class: 'diff-why' }, 'Saran: ' + e.saran));
+      const item = el('div', { class: 'diff-item flag-card' });
+      const head = el('div', { class: 'dc-head' },
+        el('span', { class: 'flag-kicker' }, e.loc ? '[' + e.loc.toUpperCase() + ']' : '[Perlu dicek]'));
+      item.append(head);
+      const h = e.masalah || e.teks || 'Catatan penerjemah';
+      item.append(el('p', { class: 'flag-h' }, h));
+      if (e.teks && e.masalah) item.append(dcRow('Teks', e.teks, ''));
+      if (e.saran) item.append(dcRow('Saran', e.saran, 'add'));
+      container.append(item);
     }
-    container.append(item);
   });
 }
 function renderResults(raw) {
@@ -559,17 +625,33 @@ function renderResults(raw) {
   window._hasilText = hasilText;
   const pre = $('#resultHasil');
   pre.innerHTML = '<code>' + (hasilText ? highlightResult(hasilText) : '<span class="placeholder">Hasil kosong.</span>') + '</code>';
+  renderHasilCards(hasilText);
   const chg = parseDiffEntries(perubSec);
   const rev = parseDiffEntries(dicekSec);
   $('#badgeHasil').textContent = String(hasilText ? hasilText.split('\n').filter(Boolean).length : 0);
   $('#badgeChg').textContent = String(chg.length);
+  $('#badgeChgTag').textContent = chg.length + ' penyesuaian leksikal';
+  $('#badgeChgTag').classList.toggle('hidden', !chg.length);
   $('#badgeRev').textContent = String(rev.length);
+  $('#badgeRevTag').textContent = rev.length + ' catatan manusia';
+  $('#badgeRevTag').classList.toggle('hidden', !rev.length);
+  $('#badgeReady').classList.toggle('hidden', !hasilText);
   renderDiffList($('#resultChanges'), chg, 'perubahan');
   renderDiffList($('#resultReview'), rev, 'perlu');
   return { chg: chg.length, rev: rev.length };
 }
 
 /* Copy/download */
+$('#btnCopySource').onclick = async () => {
+  const t = $('#txtPaste').value;
+  if (!t.trim()) return toast('Sumber kosong.', 'err');
+  try {
+    await navigator.clipboard.writeText(t);
+    toast('Naskah disalin', 'ok');
+  } catch {
+    window.prompt('Salin manual:', t);
+  }
+};
 $('#btnCopy').onclick = async () => {
   const txt = window._hasilText || state.lastResult;
   if (!txt) return toast('Belum ada hasil', 'err');
