@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0e11'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='11' fill='%23ffb03a' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=11" />
-  <script src="./theme.js?v=11"></script>
+  <link rel="stylesheet" href="./styles.css?v=12" />
+  <script src="./theme.js?v=12"></script>
 </head>
 <body>
   <div class="lamp" aria-hidden="true"></div>
@@ -57,6 +57,51 @@
         <div class="linegutter" id="lineGutter" aria-hidden="true"></div>
         <textarea id="txtPaste" spellcheck="false" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
       </div>
+
+      <div class="console">
+        <div class="console-grid">
+          <div class="param">
+            <span class="param-label">Provider</span>
+            <button class="param-value" type="button" data-open-settings>
+              <b id="providerName">Default</b>
+              <span>ubah</span>
+            </button>
+          </div>
+
+          <div class="param model-param">
+            <span class="param-label">Model</span>
+            <div class="model-control">
+              <button class="model-trigger" id="modelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">Model B</button>
+              <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
+              <button class="btn-quiet small" id="btnLoadModels" type="button">Muat</button>
+            </div>
+          </div>
+
+          <div class="param">
+            <span class="param-label">Temp</span>
+            <div class="temp-row">
+              <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" aria-label="Temperature" />
+              <output id="tempVal" for="temperature">0.50</output>
+            </div>
+          </div>
+
+          <div class="param">
+            <span class="param-label">Tokens</span>
+            <input id="maxTokens" type="number" min="256" max="32768" step="256" value="8192" aria-label="Maks token" />
+          </div>
+
+          <button class="btn-run" id="btnRun" type="button">
+            <span class="run-progress" id="runProgress" aria-hidden="true"></span>
+            <span class="run-mark" aria-hidden="true">▶</span>
+            <span id="runLabel">Jalankan</span>
+          </button>
+        </div>
+
+        <div class="run-status" id="runStatus" role="status">
+          <span class="spinner hidden" id="spinner" aria-hidden="true"></span>
+          <span id="runStatusText">Siap.</span>
+        </div>
+      </div>
     </section>
 
     <section class="pane result-pane" aria-label="Hasil penyuntingan">
@@ -101,51 +146,6 @@
       </section>
     </section>
   </main>
-
-  <footer class="console">
-    <div class="console-grid">
-      <div class="param">
-        <span class="param-label">Provider</span>
-        <button class="param-value" type="button" data-open-settings>
-          <b id="providerName">Default</b>
-          <span>ubah</span>
-        </button>
-      </div>
-
-      <div class="param model-param">
-        <span class="param-label">Model</span>
-        <div class="model-control">
-          <button class="model-trigger" id="modelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">Model B</button>
-          <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
-          <button class="btn-quiet small" id="btnLoadModels" type="button">Muat</button>
-        </div>
-      </div>
-
-      <div class="param">
-        <span class="param-label">Temp</span>
-        <div class="temp-row">
-          <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" aria-label="Temperature" />
-          <output id="tempVal" for="temperature">0.50</output>
-        </div>
-      </div>
-
-      <div class="param">
-        <span class="param-label">Tokens</span>
-        <input id="maxTokens" type="number" min="256" max="32768" step="256" value="8192" aria-label="Maks token" />
-      </div>
-
-      <button class="btn-run" id="btnRun" type="button">
-        <span class="run-progress" id="runProgress" aria-hidden="true"></span>
-        <span class="run-mark" aria-hidden="true">▶</span>
-        <span id="runLabel">Jalankan</span>
-      </button>
-    </div>
-
-    <div class="run-status" id="runStatus" role="status">
-      <span class="spinner hidden" id="spinner" aria-hidden="true"></span>
-      <span id="runStatusText">Siap.</span>
-    </div>
-  </footer>
 
   <aside class="settings hidden" id="settingsOverlay" aria-label="Pengaturan">
     <div class="settings-backdrop" data-close-settings></div>
@@ -213,6 +213,6 @@
   </aside>
 
   <div class="toast hidden" id="toast" role="status"></div>
-  <script src="./app.js?v=11"></script>
+  <script src="./app.js?v=12"></script>
 </body>
 </html>
