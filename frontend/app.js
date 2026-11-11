@@ -140,8 +140,14 @@ function resolveTheme(pref) {
 function applyTheme() {
   document.documentElement.dataset.theme = resolveTheme(state.theme);
   document.querySelector('meta[name="theme-color"]').setAttribute('content',
-    document.documentElement.dataset.theme === 'dark' ? '#0e0f13' : '#f6f5f2');
-  $('#themeIcon').outerHTML = '<span id="themeIcon">' + THEME_ICONS[state.theme] + '</span>';
+    document.documentElement.dataset.theme === 'dark' ? '#0e0f13' : '#f5f1ea');
+  const icon = $('#themeIcon');
+  if (icon) {
+    icon.className = 'theme-icon ' + state.theme;
+    icon.innerHTML = THEME_ICONS[state.theme];
+  }
+  const label = $('#themeLabel');
+  if (label) label.textContent = 'Tema: ' + ({ system: 'sistem', light: 'terang', dark: 'gelap' })[state.theme];
   $$('#themeSeg .seg-tab').forEach(b => b.classList.toggle('active', b.dataset.tseg === state.theme));
   try { localStorage.setItem(LS_THEME, state.theme); } catch { /* ignore */ }
 }
@@ -160,9 +166,11 @@ function switchView(name) {
   $$('.view').forEach(v => v.classList.add('hidden'));
   const target = document.getElementById('view-' + name);
   if (target) target.classList.remove('hidden');
-  $$('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  $$('.nav-item').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  const main = document.querySelector('.workspace');
+  if (main) main.scrollTo({ top: 0, behavior: 'auto' });
 }
-$$('.tab-item').forEach(t => t.onclick = () => switchView(t.dataset.view));
+$$('.nav-item').forEach(t => t.onclick = () => switchView(t.dataset.view));
 $('#btnToSettings').onclick = () => switchView('pengaturan');
 $('#btnBackSunting').onclick = () => switchView('sunting');
 
@@ -583,6 +591,10 @@ function renderDiffList(container, entries, kind) {
   });
 }
 
+function switchResultTab(name) {
+  $$('.result-tab').forEach(b => b.classList.toggle('active', b.dataset.rtab === name));
+  $$('.result-pane').forEach(p => p.classList.toggle('active', p.id === 'panel' + name[0].toUpperCase() + name.slice(1)));
+}
 function renderResults(raw, run) {
   const resultsCard = $('#resultsCard');
   if (resultsCard) resultsCard.classList.remove('hidden');
@@ -592,10 +604,16 @@ function renderResults(raw, run) {
   window._hasilText = hasilText;
   const chg = parseDiffEntries(perubSec);
   const rev = parseDiffEntries(dicekSec);
+  const hasilLines = hasilText ? hasilText.split('\n').filter(x => x.trim()).length : 0;
+  const hasilBadge = $('#hasilBadge');
+  if (hasilBadge) hasilBadge.textContent = String(hasilLines);
   $('#chgBadge').textContent = String(chg.length);
   $('#revBadge').textContent = String(rev.length);
   renderDiffList($('#resultChanges'), chg, 'perubahan');
   renderDiffList($('#resultReview'), rev, 'perlu');
+  if (window.innerWidth < 1080) {
+    setTimeout(() => { $('#resultsCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+  }
   return { chg: chg.length, rev: rev.length };
 }
 
@@ -613,6 +631,7 @@ function download(name, text) {
 }
 $('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
+$$('.result-tab').forEach(b => b.onclick = () => switchResultTab(b.dataset.rtab));
 
 /* ---------- init ---------- */
 (async function init() {
