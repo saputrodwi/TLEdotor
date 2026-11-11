@@ -1,11 +1,10 @@
 /* ============================================================
-   TL Editor — frontend logic (Ocrku-style compact 2-tab)
+   TL Editor — frontend logic (Lentera, 2-tab input-first)
    Sunting tab: input + run bar + results (inline)
-   Pengaturan tab: provider, keys, model, prompt, security
+   Pengaturan tab: provider, keys, model, prompt, tampilan
    Cloudflare Pages (static) -> Pages Function -> Worker
-   Default: Cloudflare [ai] binding (no key, no token).
-   Security: AES-GCM + PBKDF2 encrypted key vault, memory-only
-   plaintext, per-provider multi-key, HTTPS-only. No key logging.
+   Storage: plaintext localStorage (tanpa vault).
+   HTTPS-only. Key tidak pernah masuk log server.
    ============================================================ */
 (() => {
 'use strict';
@@ -41,7 +40,7 @@ const PROVIDERS = {
     keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
   },
   default: {
-    label: 'Default', icon: 'D', tag: '',
+    label: 'Default', icon: 'D', tag: 'Server key',
     keyLabel: '', multiKey: false, serverKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
     modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
@@ -70,85 +69,91 @@ const state = {
   provider: 'default',
   keys: { gemini: [], default: [], sumopod: [], custom: [] },
   models: { default: 'agnes-2.5-flash' },
-  temperature: 0.2,
+  temperature: 0.5,
   maxTokens: 8192,
   custom: { baseUrl: '', format: 'openai' },
-  storageMode: 'device',
-  unlocked: false,
+  theme: 'system',
   systemPrompt: '',
   lastResult: null,
   lastRun: null,
 };
-let _aesKey = null;
-const KEY_IDS = {};
-let KEY_SEQ = 0;
-const nextKey = (p) => (KEY_IDS[p] = (KEY_IDS[p] || 0) + 1, KEY_SEQ++, 'k' + KEY_SEQ);
 
-/* ---------- Web Crypto vault ---------- */
-const b64 = {
-  enc: (u8) => btoa(String.fromCharCode.apply(null, u8)),
-  dec: (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0)),
+/* ---------- storage (plaintext, tanpa vault) ---------- */
+const LS_SETTINGS = 'tl.settings.v2';
+const LS_KEYS = 'tl.keys.v2';
+const LS_THEME = 'tl.theme';
+
+function saveSettings() {
+  try {
+    localStorage.setItem(LS_SETTINGS, JSON.stringify({
+      provider: state.provider,
+      models: state.models,
+      temperature: state.temperature,
+      maxTokens: state.maxTokens,
+      custom: state.custom,
+      systemPrompt: state.systemPrompt,
+    }));
+  } catch { /* quota */ }
+}
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || 'null');
+    if (!s) return;
+    state.provider = s.provider || 'default';
+    state.models = s.models || state.models;
+    state.temperature = s.temperature ?? 0.5;
+    state.maxTokens = s.maxTokens ?? 8192;
+    state.custom = Object.assign(state.custom, s.custom || {});
+    if (typeof s.systemPrompt === 'string' && s.systemPrompt) state.systemPrompt = s.systemPrompt;
+  } catch { /* corrupt -> defaults */ }
+}
+function saveKeys() {
+  try {
+    const o = {};
+    for (const p of PROVIDER_IDS) o[p] = state.keys[p].map(k => k.value).filter(Boolean);
+    localStorage.setItem(LS_KEYS, JSON.stringify(o));
+  } catch { /* quota */ }
+}
+function loadKeys() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_KEYS) || 'null');
+    if (!o) return;
+    for (const p of PROVIDER_IDS) {
+      const arr = Array.isArray(o[p]) ? o[p] : [];
+      state.keys[p] = arr.map(v => ({ id: 'k' + Math.random().toString(36).slice(2, 9), value: String(v), shown: false }));
+    }
+  } catch { /* corrupt -> empty */ }
+}
+function autoSave() { saveSettings(); saveKeys(); }
+
+/* ---------- theme (Lentera: sistem / terang / gelap) ---------- */
+const THEME_ICONS = {
+  system: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>',
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>',
+  dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>',
 };
-async function deriveAesKey(passphrase, salt, iter = 310000) {
-  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+function resolveTheme(pref) {
+  if (pref === 'light') return 'light';
+  if (pref === 'dark') return 'dark';
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
-async function vaultEncrypt(key, obj) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
-  return { iv: b64.enc(iv), data: b64.enc(new Uint8Array(ct)) };
+function applyTheme() {
+  document.documentElement.dataset.theme = resolveTheme(state.theme);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content',
+    document.documentElement.dataset.theme === 'dark' ? '#0e0f13' : '#f6f5f2');
+  $('#themeIcon').outerHTML = '<span id="themeIcon">' + THEME_ICONS[state.theme] + '</span>';
+  $$('#themeSeg .seg-tab').forEach(b => b.classList.toggle('active', b.dataset.tseg === state.theme));
+  try { localStorage.setItem(LS_THEME, state.theme); } catch { /* ignore */ }
 }
-async function vaultDecrypt(key, packed) {
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64.dec(packed.iv) }, key, b64.dec(packed.data));
-  return JSON.parse(new TextDecoder().decode(pt));
-}
-function collectVaultPayload() {
-  return {
-    keys: Object.fromEntries(PROVIDER_IDS.map(p => [p, state.keys[p].map(k => k.value)])),
-    models: state.models,
-    temperature: state.temperature,
-    maxTokens: state.maxTokens,
-    custom: state.custom,
-  };
-}
-async function persistVault() {
-  if (state.storageMode === 'device' && _aesKey) {
-    const packed = await vaultEncrypt(_aesKey, collectVaultPayload());
-    let meta = JSON.parse(localStorage.getItem('tl.vault.meta') || '{}');
-    localStorage.setItem('tl.vault.data', JSON.stringify(packed));
-    localStorage.setItem('tl.vault.meta', JSON.stringify({ v: 1, iter: meta.iter || 310000, salt: meta.salt }));
-  } else if (state.storageMode === 'session') {
-    sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
-  }
-}
-function applyVaultPayload(p) {
-  for (const pid of PROVIDER_IDS) {
-    const arr = Array.isArray(p.keys?.[pid]) ? p.keys[pid] : [];
-    state.keys[pid] = arr.map(v => ({ id: nextKey(pid), value: String(v), shown: false }));
-  }
-  if (p.models) state.models = p.models;
-  state.temperature = p.temperature ?? 0.2;
-  state.maxTokens = p.maxTokens ?? 8192;
-  if (p.custom) state.custom = p.custom;
-}
-async function createVault(passphrase) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  _aesKey = await deriveAesKey(passphrase, salt);
-  const packed = await vaultEncrypt(_aesKey, collectVaultPayload());
-  localStorage.setItem('tl.vault.data', JSON.stringify(packed));
-  localStorage.setItem('tl.vault.meta', JSON.stringify({ v: 1, iter: 310000, salt: b64.enc(salt) }));
-  state.storageMode = 'device'; state.unlocked = true;
-  await persistVault();
-}
-async function unlockVault(passphrase) {
-  const metaRaw = localStorage.getItem('tl.vault.meta'); const dataRaw = localStorage.getItem('tl.vault.data');
-  if (!metaRaw || !dataRaw) throw new Error('Vault tidak ditemukan.');
-  const meta = JSON.parse(metaRaw); const data = JSON.parse(dataRaw);
-  const key = await deriveAesKey(passphrase, b64.dec(meta.salt), meta.iter || 310000);
-  const p = await vaultDecrypt(key, data);
-  _aesKey = key; applyVaultPayload(p); state.storageMode = 'device'; state.unlocked = true;
-  await persistVault();
-}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.theme === 'system') applyTheme(); });
+$('#themeToggle').onclick = () => {
+  state.theme = state.theme === 'system' ? 'light' : state.theme === 'light' ? 'dark' : 'system';
+  applyTheme();
+  toast('Tampilan: ' + ({ system: 'ikuti sistem', light: 'terang', dark: 'gelap' })[state.theme]);
+};
+$$('#themeSeg .seg-tab').forEach(b => b.onclick = () => { state.theme = b.dataset.tseg; applyTheme(); });
+try { state.theme = localStorage.getItem(LS_THEME) || 'system'; } catch { /* default */ }
+applyTheme();
 
 /* ---------- tab switching ---------- */
 function switchView(name) {
@@ -180,35 +185,36 @@ function selectProvider(id) {
   state.provider = id;
   renderProviderTiles();
   syncProviderUI();
-  renderKeys();
+  renderKeyCard();
   renderModelSelect();
+  autoSave();
 }
 function syncProviderUI() {
   const p = PROVIDERS[state.provider];
-  $('#customWrap').classList.toggle('hidden', state.provider !== 'custom');
-  $('#customBaseUrl').value = state.custom.baseUrl;
+  const cw = $('#customWrap');
+  if (cw) cw.classList.toggle('hidden', state.provider !== 'custom');
+  const cu = $('#customBaseUrl');
+  if (cu) cu.value = state.custom.baseUrl;
   $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
-  $('#provKeyLabel').textContent = p.label;
   $('#runProviderLabel').textContent = p.label;
-  if (p.serverKey) {
-    $('#keyEncryptionNote').textContent = 'Kunci di server. Tanpa input.';
-  } else {
-    $('#keyEncryptionNote').textContent = p.keyLabel + ' • terenkripsi (AES-GCM), hanya di perangkat.';
-  }
 }
 
 /* ---------- model select ---------- */
+function setTrigger(label) {
+  const trigger = $('#modelTrigger');
+  trigger.textContent = '';
+  trigger.append(document.createTextNode(label), el('span', { class: 'chev' }, '▾'));
+}
 function renderModelSelect() {
   const p = PROVIDERS[state.provider];
   const popup = $('#modelPopup'); popup.innerHTML = '';
-  const trigger = $('#modelTrigger');
   (p.models || []).forEach(m => {
     const label = (p.modelLabels && p.modelLabels[m]) || m;
-    const opt = el('button', { class: 'mopt' + (state.models[state.provider] === m ? ' sel' : '') }, label);
+    const opt = el('button', { class: 'mopt' + (state.models[state.provider] === m ? ' sel' : ''), role: 'option' }, label);
     opt.onclick = (e) => {
       e.stopPropagation();
       state.models[state.provider] = m;
-      trigger.textContent = label;
+      setTrigger(label);
       $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
       opt.classList.add('sel');
       popup.classList.add('hidden');
@@ -218,7 +224,7 @@ function renderModelSelect() {
   });
   if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
   const cur = p.modelLabels && p.modelLabels[state.models[state.provider]] ? p.modelLabels[state.models[state.provider]] : state.models[state.provider];
-  trigger.textContent = cur || '— pilih model —';
+  setTrigger(cur || '— pilih model —');
 }
 $('#modelTrigger').onclick = (e) => {
   e.stopPropagation();
@@ -229,62 +235,83 @@ document.addEventListener('click', (e) => {
   if (popup && !popup.classList.contains('hidden') && !e.target.closest('.rb-model')) popup.classList.add('hidden');
 });
 
-/* ---------- keys UI ---------- */
-function renderKeys() {
-  const list = $('#kunciList'); list.innerHTML = '';
-  const keys = state.keys[state.provider];
+/* ---------- keys UI (ringkas, plaintext) ---------- */
+function currentKeyValues(p) { return state.keys[p].map(k => k.value).filter(Boolean); }
+function renderKeyCard() {
+  const box = $('#keyCardBody'); box.innerHTML = '';
   const p = PROVIDERS[state.provider];
-  $('#keyCount').textContent = keys.filter(k => k.value).length + ' aktif';
-  if (state.storageMode === 'device' && !state.unlocked && localStorage.getItem('tl.vault.data')) {
-    const b = el('button', { class: 'ghost-btn', style: 'width:100%;padding:8px' }, 'Terkunci — ' + keys.length + ' kunci tersimpan. Buka kunci di bawah.');
-    b.onclick = () => { switchView('pengaturan'); setTimeout(() => $('#unlockPass').focus(), 60); };
-    list.append(el('div', { class: 'key-item' }, el('span', { class: 'kdot' }), b));
-    updateSecChecklist();
-    return;
-  }
-  if (keys.length === 0) {
-    const msg = p.serverKey
-      ? 'Kunci di server (Worker). Tanpa input. Langsung pakai.'
-      : 'Belum ada kunci untuk ' + p.label + '. Klik "+ Tambah kunci".';
-    list.append(el('div', { class: 'muted', style: 'padding:4px' }, msg));
-    updateSecChecklist();
-    return;
-  }
-  keys.forEach((k, i) => {
-    const valid = p.keyRe ? p.keyRe.test(k.value) : k.value.length >= 4;
-    const mask = k.value ? '•'.repeat(Math.min(10, Math.max(4, Math.floor(k.value.length / 3)))) + ' ' + k.value.slice(-4) : '(kosong)';
-    const item = el('div', { class: 'key-item' + (valid ? '' : ' invalid') });
-    item.append(
-      el('span', { class: 'kdot' }),
-      el('span', { class: 'kname' }, 'Kunci ' + (i + 1)),
-      el('span', { class: 'kmask', id: 'mask-' + k.id }, k.shown ? k.value : mask),
-    );
-    const acts = el('span', { class: 'kactions' });
-    const eye = el('button', { class: 'kbtn', title: 'Tampilkan' }, 'Lihat');
-    eye.style.fontSize = '11px';
-    eye.onclick = () => { k.shown = !k.shown; eye.textContent = k.shown ? 'Semb' : 'Lihat'; const m2 = document.getElementById('mask-' + k.id); if (m2) m2.textContent = k.shown ? k.value : mask; };
-    const del = el('button', { class: 'kbtn del', title: 'Hapus' }, '×');
-    del.onclick = () => { keys.splice(i, 1); renderKeys(); autoSave(); };
-    acts.append(eye, del);
-    item.append(acts);
-    const inp = el('input', { class: 'kedit', value: k.value, placeholder: p.keyLabel, spellcheck: 'false' });
-    inp.onchange = () => { k.value = inp.value.trim(); renderKeys(); autoSave(); toast('Kunci diperbarui', 'ok'); };
-    item.append(inp);
-    list.append(item);
-  });
-  updateSecChecklist();
-}
-$('#btnAddKey').onclick = async () => {
-  const p = PROVIDERS[state.provider];
-  const first = state.keys[state.provider].length === 0;
-  if (first && !state.unlocked) await maybePromptPass();
-  state.keys[state.provider].push({ id: nextKey(state.provider), value: '', shown: false });
-  renderKeys(); autoSave();
-  if (first) $('#pingResults').classList.add('hidden');
-};
-function autoSave() { if (state.unlocked) persistVault().catch(e => toast('Gagal menyimpan vault: ' + e.message, 'err')); }
+  const keys = currentKeyValues(state.provider);
+  $('#keyCount').textContent = (p.serverKey ? 'server key' : keys.length + ' kunci');
 
-/* ---------- API (same-origin, no gateway secret) ---------- */
+  const foot = el('div', { class: 'key-foot' });
+  foot.append(el('button', { class: 'ghost-btn', id: 'btnPingAll' }, 'Tes koneksi'));
+
+  if (p.serverKey) {
+    box.append(el('div', { class: 'field-label' }, 'API key — ' + p.label));
+    box.append(el('div', { class: 'key-state ok' }, el('span', { class: 'dot' }), 'Kunci di server (Worker) — tanpa input apa pun.'));
+    box.append(foot);
+  } else {
+    box.append(el('div', { class: 'field-label' }, 'API key — ' + p.label + (p.multiKey ? ' (pisahkan dengan koma untuk rotasi)' : '')));
+    const inp = el('input', {
+      class: 'input', id: 'keyInput', type: 'text', spellcheck: 'false', autocomplete: 'off',
+      placeholder: p.keyHint || 'masukkan api key…',
+      value: state.keys[state.provider].map(k => k.value).join(', '),
+    });
+    inp.addEventListener('input', () => {
+      const parts = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+      state.keys[state.provider] = parts.map((v, i) => ({ id: 'k' + i + '-' + Math.random().toString(36).slice(2, 6), value: v, shown: false }));
+      $('#keyCount').textContent = parts.length + ' kunci';
+      autoSave();
+    });
+    box.append(inp);
+    if (keys.length) foot.append(el('span', { class: 'key-state' }, el('span', { class: 'dot' }), keys.length + ' tersimpan di browser'));
+    box.append(foot);
+  }
+
+  if (state.provider === 'custom') {
+    const wrap = el('div', { id: 'customWrap' });
+    wrap.append(el('label', { class: 'field-label' }, 'Base URL (OpenAI-compatible, HTTPS)'));
+    const url = el('input', { id: 'customBaseUrl', class: 'input', placeholder: 'https://host.example.com/v1', autocomplete: 'off', spellcheck: 'false', value: state.custom.baseUrl });
+    url.addEventListener('input', () => { state.custom.baseUrl = url.value.trim(); autoSave(); });
+    wrap.append(url);
+    const seg = el('div', { class: 'seg-tabs custom-format-tabs', id: 'customFormatTabs' });
+    ['openai', 'gemini'].forEach(cf => seg.append(el('button', { class: 'seg-tab' + (state.custom.format === cf ? ' active' : ''), 'data-cf': cf }, cf === 'openai' ? 'OpenAI' : 'Gemini')));
+    wrap.append(seg);
+    $$('#customFormatTabs .seg-tab').forEach(b => b.onclick = () => {
+      state.custom.format = b.dataset.cf;
+      syncProviderUI(); autoSave();
+    });
+    box.append(wrap);
+  }
+
+  $('#btnPingAll').onclick = pingAll;
+}
+
+/* ---------- ping ---------- */
+async function pingAll() {
+  const p = state.provider;
+  const keys = currentKeyValues(p);
+  const serverKey = PROVIDERS[p].serverKey;
+  if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
+  const box = $('#pingResults'); box.classList.remove('hidden');
+  box.innerHTML = '<div class="muted">' + (serverKey ? 'Menguji server key…' : 'Menguji ' + keys.length + ' key…') + '</div>';
+  try {
+    const body = { provider: p, model: PROVIDERS[p].models[0] || '', keys };
+    if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
+    const r = await apiCall('/api/ping', body);
+    box.innerHTML = '';
+    if (serverKey) {
+      box.append(el('div', { class: 'ping-row ' + (r.ok ? 'ok' : 'bad') }, el('span', {}, 'Server key'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
+    } else if (r.results) {
+      r.results.forEach(row => {
+        box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
+          el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
+      });
+    }
+  } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message)); }
+}
+
+/* ---------- API (same-origin) ---------- */
 async function apiCall(path, body, method = 'POST') {
   const headers = {};
   if (body) headers['Content-Type'] = 'application/json';
@@ -299,55 +326,24 @@ async function apiCall(path, body, method = 'POST') {
   return data;
 }
 
-$('#btnPingAll').onclick = async () => {
-  const keys = state.keys[state.provider].map(k => k.value).filter(Boolean);
-  const p = state.provider;
-  const serverKey = PROVIDERS[p].serverKey;
-  if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
-  const box = $('#pingResults'); box.classList.remove('hidden');
-  box.innerHTML = '<div class="muted">' + (serverKey ? 'Menguji server key…' : 'Menguji ' + keys.length + ' key…') + '</div>';
-  try {
-    const body = { provider: p, model: PROVIDERS[p].models[0] || '', keys };
-    if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
-    const r = await apiCall('/api/ping', body);
-    box.innerHTML = '';
-    if (serverKey) {
-      box.append(el('div', { class: 'ping-row ok' }, el('span', {}, 'Server key'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
-    } else {
-      r.results.forEach(row => {
-        box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
-          el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
-      });
-    }
-  } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message)); }
-};
-
-function checkWorkerStatus() {
-  apiCall('/api/health', null, 'GET').catch(() => {});
-}
-
 /* ---------- source file handling ---------- */
 function updateSourceStats() {
   const t = $('#txtPaste').value;
   const lines = t ? t.split('\n').filter(x => x.length).length : 0;
   const pages = (t.match(/^\s*P\d+/gm) || []).length;
-  $('#statLines').textContent = lines + ' baris';
+  $('#srcBadge').textContent = lines + ' baris';
   $('#statPages').textContent = pages + ' halaman';
   $('#statChars').textContent = t.length.toLocaleString('en-US') + ' karakter';
   $('#statTokens').textContent = '~' + Math.round(t.length / 3.5).toLocaleString('en-US') + ' token';
   updateLineNumbers();
 }
 function updateLineNumbers() {
-  const on = $('#lineNumbers').checked;
   const g = $('#lineGutter');
-  if (!on) { g.style.visibility = 'hidden'; g.innerHTML = ''; return; }
-  g.style.visibility = 'visible';
   const n = $('#txtPaste').value.split('\n').length;
-  let s = ''; for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0');
-  g.textContent = s;
+  let s = ''; for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0') + '\n';
+  g.textContent = s.trimEnd();
 }
 $('#txtPaste').addEventListener('input', updateSourceStats);
-$('#lineNumbers').onchange = updateLineNumbers;
 $('#txtPaste').addEventListener('scroll', () => { $('#lineGutter').scrollTop = $('#txtPaste').scrollTop; });
 
 function normalizeText(t) {
@@ -364,7 +360,7 @@ $('#btnSample').onclick = async () => {
   catch { toast('Gagal memuat contoh', 'err'); }
 };
 
-/* file button always visible — no seg-tabs */
+/* file button always visible */
 $('#btnChooseFile').onclick = () => $('#fileInput').click();
 $('#fileInput').onchange = async (e) => {
   const files = e.target.files;
@@ -375,7 +371,6 @@ $('#fileInput').onchange = async (e) => {
   toast('File "' + f.name + '" dimuat (' + f.size.toLocaleString() + ' bytes)', 'ok');
   e.target.value = '';
 };
-// drag & drop
 const srcArea = $('#srcArea');
 ['dragover', 'drop'].forEach(ev => srcArea.addEventListener(ev, e => e.preventDefault()));
 srcArea.addEventListener('drop', async e => {
@@ -389,28 +384,28 @@ srcArea.addEventListener('drop', async e => {
 /* ---------- model loading ---------- */
 $('#btnLoadModels').onclick = async () => {
   const p = state.provider;
-  const keys = state.keys[p].map(k => k.value).filter(Boolean);
+  const keys = currentKeyValues(p);
   const serverKey = PROVIDERS[p].serverKey;
   const panel = $('#modelList');
   if (!serverKey && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
   panel.innerHTML = '';
-  panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
+  panel.append(el('div', { class: 'model-opt model-note' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
   try {
-    let qs = '/api/models?provider=' + encodeURIComponent(p) + '&keys=' + encodeURIComponent(JSON.stringify(keys));
-    if (p === 'custom') qs += '&cust=' + encodeURIComponent(JSON.stringify({ baseUrl: state.custom.baseUrl, format: state.custom.format }));
-    const r = await apiCall(qs, null, 'GET');
+    const body = { provider: p, keys };
+    if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
+    const r = await apiCall('/api/models', body, 'POST');
     const models = r.models || [];
     panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt', style: 'cursor:default' }, el('span', { class: 'muted' }, serverKey ? 'Pakai daftar di dropdown.' : '0 model via API.'))); return; }
+    if (!models.length) { panel.append(el('div', { class: 'model-opt model-note' }, el('span', { class: 'muted' }, serverKey ? 'Pakai daftar di dropdown.' : '0 model via API.'))); return; }
     models.slice(0, 100).forEach(m => {
-      const trigger = $('#modelTrigger');
       const label = (PROVIDERS[p].modelLabels && PROVIDERS[p].modelLabels[m.id]) || m.id;
-      if (!$('#modelPopup').querySelector('.mopt[data-mid="' + m.id + '"]')) {
+      const exists = $$('#modelPopup .mopt').some(x => x.dataset.mid === m.id);
+      if (!exists) {
         const opt = el('button', { class: 'mopt' + (state.models[p] === m.id ? ' sel' : ''), 'data-mid': m.id }, label);
         opt.onclick = (e) => {
           e.stopPropagation();
           state.models[p] = m.id;
-          trigger.textContent = label;
+          setTrigger(label);
           $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
           opt.classList.add('sel');
           $('#modelPopup').classList.add('hidden');
@@ -422,21 +417,10 @@ $('#btnLoadModels').onclick = async () => {
     });
   } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
 };
-$('#modelTrigger').onclick = (e) => {
-  e.stopPropagation();
-  $('#modelPopup').classList.toggle('hidden');
-};
-document.addEventListener('click', (e) => {
-  const popup = $('#modelPopup');
-  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.rb-model')) popup.classList.add('hidden');
-});
 
 /* ---------- params ---------- */
-$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); };
-$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; };
-
-$('#customBaseUrl').oninput = () => { state.custom.baseUrl = $('#customBaseUrl').value.trim(); autoSave(); };
-$$('#customFormatTabs [data-cf]').forEach(b => b.onclick = () => { state.custom.format = b.dataset.cf; syncProviderUI(); autoSave(); });
+$('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); autoSave(); };
+$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; autoSave(); };
 
 function applyParams() {
   $('#temperature').value = state.temperature;
@@ -450,7 +434,7 @@ async function loadDefaultPrompt() {
   catch { /* leave empty -> worker fallback */ }
 }
 function updatePromptMeta() { $('#promptChars').textContent = $('#systemPrompt').value.length.toLocaleString() + ' karakter'; }
-$('#systemPrompt').oninput = () => { state.systemPrompt = $('#systemPrompt').value; updatePromptMeta(); };
+$('#systemPrompt').oninput = () => { state.systemPrompt = $('#systemPrompt').value; updatePromptMeta(); autoSave(); };
 $('#btnTogglePrompt').onclick = () => {
   const open = $('#systemPrompt').classList.toggle('hidden');
   $('#btnTogglePrompt').textContent = open ? 'Perinci' : 'Tutup';
@@ -463,7 +447,7 @@ $('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt
 async function runEditor() {
   const p = state.provider;
   const model = state.models[state.provider] || '';
-  const keys = state.keys[p].map(k => k.value).filter(Boolean);
+  const keys = currentKeyValues(p);
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih model', 'err');
   const serverKey = PROVIDERS[p].serverKey;
@@ -524,7 +508,6 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- result parsing ---------- */
-
 function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 function highlightResult(text) {
   const show = $('#diffMode').checked;
@@ -631,107 +614,24 @@ function download(name, text) {
 $('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
 
-/* ---------- security ---------- */
-function updateSecChecklist() {
-  const items = [
-    ['HTTPS-only', /https:/.test(location.protocol)],
-    ['Key multi per-provider', true],
-    ['Vault terenkripsi (AES-GCM + PBKDF2)', state.storageMode === 'device' ? state.unlocked : false],
-    ['Plaintext hanya di memori', true],
-    ['Server key (Default provider)', state.provider === 'default'],
-  ];
-  const ul = $('#secChecklist'); ul.innerHTML = '';
-  items.forEach(([label, ok]) => ul.append(el('li', {}, (ok ? '\u2713 ' : '\u25cb ') + label)));
-  $('#vaultState').textContent = state.storageMode === 'device' ? (state.unlocked ? 'dibuka' : 'terkunci') : 'hanya sesi';
-}
-$('#btnLock').onclick = () => {
-  _aesKey = null;
-  for (const p of PROVIDER_IDS) state.keys[p].forEach(k => { k.value = ''; k.shown = false; });
-  sessionStorage.removeItem('tl.session');
-  state.unlocked = false;
-  renderKeys(); updateSecChecklist();
-  toast('Key dikunci dari memori');
-};
-$('#btnWipeVault').onclick = () => {
-  if (!confirm('Hapus SEMUA API key dan vault?')) return;
-  localStorage.removeItem('tl.vault.data'); localStorage.removeItem('tl.vault.meta');
-  sessionStorage.removeItem('tl.session');
-  for (const p of PROVIDER_IDS) state.keys[p] = [];
-  _aesKey = null; state.unlocked = false;
-  renderKeys(); updateSecChecklist(); toast('Semua key dihapus');
-};
-$$('#storageMode [data-mode]').forEach(b => b.onclick = () => {
-  $$('#storageMode [data-mode]').forEach(x => x.classList.remove('active')); b.classList.add('active');
-  state.storageMode = b.dataset.mode;
-  if (state.storageMode === 'session') {
-    sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
-    localStorage.removeItem('tl.vault.data'); localStorage.removeItem('tl.vault.meta');
-    _aesKey = null;
-  }
-  updateSecChecklist();
-});
-$('#btnUnlock').onclick = async () => {
-  try { await unlockVault($('#unlockPass').value); renderKeys(); updateSecChecklist(); toast('Vault dibuka', 'ok'); $('#unlockPass').value = ''; }
-  catch (e) { toast('Passphrase salah / vault rusak: ' + e.message, 'err'); }
-};
-
-/* ---------- first-use passphrase ---------- */
-async function maybePromptPass() {
-  if (state.unlocked) return;
-  if (state.storageMode === 'session' && sessionStorage.getItem('tl.session')) return;
-  const useSession = confirm('Simpan API key di perangkat ini?\n\nOK = terenkripsi (AES-GCM, passphrase, localStorage)\nBatal = hanya sesi ini (jangan simpan ke browser)');
-  if (useSession) {
-    state.storageMode = 'session'; state.unlocked = true;
-    sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
-    return;
-  }
-  await new Promise(res => { $('#passModal').classList.remove('hidden'); $('#passModal')._res = res; });
-  const p1 = $('#pass1').value, p2 = $('#pass2').value;
-  if (p1.length < 8) { toast('Passphrase minimal 8 karakter', 'err'); $('#passModal').classList.remove('hidden'); return; }
-  if (p1 !== p2) { toast('Konfirmasi passphrase tidak cocok', 'err'); $('#passModal').classList.remove('hidden'); return; }
-  await createVault(p1);
-  $('#passModal').classList.add('hidden');
-}
-$('#passCreate').onclick = async () => {
-  const p1 = $('#pass1').value, p2 = $('#pass2').value;
-  if (p1.length < 8) return toast('Passphrase minimal 8 karakter', 'err');
-  if (p1 !== p2) return toast('Konfirmasi tidak cocok', 'err');
-  await createVault(p1); $('#passModal').classList.add('hidden'); renderKeys(); updateSecChecklist(); toast('Vault dikunci & disimpan', 'ok');
-  if ($('#passModal')._res) { $('#passModal')._res(); $('#passModal')._res = null; }
-};
-$('#passSkip').onclick = () => {
-  state.storageMode = 'session'; state.unlocked = true;
-  sessionStorage.setItem('tl.session', JSON.stringify(collectVaultPayload()));
-  $('#passModal').classList.add('hidden');
-  if ($('#passModal')._res) { $('#passModal')._res(); $('#passModal')._res = null; }
-};
-
 /* ---------- init ---------- */
 (async function init() {
+  // bersihkan sisa vault lama (versi enkripsi AES-GCM sudah dihapus)
+  try {
+    localStorage.removeItem('tl.vault.data');
+    localStorage.removeItem('tl.vault.meta');
+    sessionStorage.removeItem('tl.session');
+  } catch { /* ignore */ }
+  loadSettings();
+  loadKeys();
   renderProviderTiles();
-  renderKeys();
+  syncProviderUI();
+  renderKeyCard();
   renderModelSelect();
   applyParams();
   updateSourceStats();
-  updatePromptMeta();
   switchView('sunting');
-  updateSecChecklist();
-  checkWorkerStatus();
-
-  const meta = localStorage.getItem('tl.vault.meta');
-  if (meta) {
-    state.storageMode = 'device';
-    $$('#storageMode [data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'device'));
-    $('#unlockPass').focus();
-  } else {
-    const sess = sessionStorage.getItem('tl.session');
-    if (sess) {
-      state.storageMode = 'session'; state.unlocked = true;
-      applyVaultPayload(JSON.parse(sess));
-      $$('#storageMode [data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'session'));
-      renderKeys(); renderModelSelect(); syncProviderUI(); applyParams();
-    }
-  }
-  loadDefaultPrompt();
+  if (state.systemPrompt) { $('#systemPrompt').value = state.systemPrompt; updatePromptMeta(); }
+  else loadDefaultPrompt();
 })();
 })();

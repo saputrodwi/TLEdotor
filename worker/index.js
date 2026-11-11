@@ -6,7 +6,6 @@
 // strict response headers, constant-time gateway-secret check, provider isolation.
 //
 // Env (see wrangler.toml):
-//   AI                 Cloudflare Workers AI binding (used when no account/token given)
 //   GATEWAY_SECRET     optional shared secret; when set, requests must send X-TL-Gateway
 //   CORS_ALLOWED_ORIGINS optional comma list; default = reflect request origin only
 //   MAX_TEXT_BYTES     optional max .txt input bytes (default 400000)
@@ -47,8 +46,10 @@ function rateLimit(ip, limitPerMin, windowMs = 60_000) {
 
 function isPrivateOrLoopbackHost(host) {
   const h = host.toLowerCase();
-  if (h === 'localhost' || h === '0.0.0.0' || h === '127.0.0.1' || h === '[::1]' || h === '::1') return true;
-  if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('.ts.net')) return true;
+  if (h === 'localhost' || h === '0.0.0.0' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || h === '0:0:0:0:0:0:0:1') return true;
+  if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.endsWith('.ts.net') || h.endsWith('.localhost')) return true;
+  if (h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) return true;
+  if (/^::ffff:/.test(h) && (h.includes('127.') || h.includes('10.') || h.includes('192.168') || h.includes('169.254'))) return true;
   // bare IPv4 literal
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
@@ -244,64 +245,6 @@ async function callGemini({ base, key, model, system, userMsg, temperature, maxT
   return { text, usage: data && data.usageMetadata ? data.usageMetadata : null };
 }
 
-async function callCloudflare({ account, token, model, system, userMsg, temperature, maxTokens, timeoutMs }) {
-  const u = new URL(BASE.cloudflare + '/accounts/' + encodeURIComponent(account) + '/ai/run/' + encodeURIComponent(model));
-  const body = {};
-  if (maxTokens) body.max_tokens = maxTokens;
-  if (temperature != null && !Number.isNaN(temperature)) body.temperature = temperature;
-  body.messages = [];
-  if (system) body.messages.push({ role: 'system', content: system });
-  body.messages.push({ role: 'user', content: userMsg });
-  const res = await fetch(u, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || (data && data.success === false)) {
-    const status = res.status;
-    const e = new Error('provider ' + status);
-    e.status = status;
-    e.detail = (data && (data.errors && data.errors[0] && data.errors[0].message)) || ('cloudflare ' + status);
-    throw e;
-  }
-  const result = data && data.result;
-  const text = result ? (result.response || (typeof result === 'string' ? result : JSON.stringify(result))) : '';
-  return { text, usage: data && data.response ? { promptTokens: data.response.prompt_tokens, completionTokens: data.response.completion_tokens } : null };
-}
-
-// Cloudflare Workers AI via the server-side [ai] binding (env.AI) — no account
-// id, no API token. Runs under the deploying account's entitlements. Text
-// models return a string; wrap with a timeout so a stuck model can't hang the worker.
-async function callCloudflareBinding(env, { model, system, userMsg, temperature, maxTokens, timeoutMs }) {
-  const messages = [];
-  if (system) messages.push({ role: 'system', content: system });
-  messages.push({ role: 'user', content: userMsg });
-  const opts = { messages };
-  if (maxTokens) opts.max_tokens = maxTokens;
-  if (temperature != null && !Number.isNaN(temperature)) opts.temperature = temperature;
-  let out;
-  try {
-    out = await Promise.race([
-      env.AI.run(model, opts),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout setelah ' + Math.round(timeoutMs / 1000) + ' detik')), timeoutMs)),
-    ]);
-  } catch (e) {
-    const detail = String((e && (e.message || e)) || 'gagal');
-    let status = e && e.status ? Number(e.status) : 503, hint = '';
-    if (/not found|unknown|invalid model|doesn'?t exist/i.test(detail)) { status = 404; hint = ' (model "' + model + '" tak tersedia di akun/entitlement kamu)'; }
-    else if (/quota|rate|exceed|limit|insufficient|entitl?e?d|billing/i.test(detail)) { status = 429; hint = ' (kuota/limit — periksa kuota neuron gratis 10k/hari)'; }
-    else if (/timeout/i.test(detail)) { status = 504; }
-    const error = new Error('cloudflare binding: ' + detail);
-    error.status = status;
-    error.detail = detail + hint;
-    throw error;
-  }
-  const text = typeof out === 'string' ? out : (out && (out.text || out.response)) || JSON.stringify(out);
-  return { text, usage: null };
-}
-
 /* ---------------- list-models ---------------- */
 
 async function listModels(provider, body, key, timeoutMs) {
@@ -325,19 +268,6 @@ async function listModels(provider, body, key, timeoutMs) {
     data = await res.json().catch(() => null);
     if (!res.ok) throw httpError(res.status, 'LIST_FAILED', 'Gagal memuat model');
     return ((data && data.data) || []).map(m => ({ id: m.id, displayName: m.name || m.id }));
-  }
-  if (provider === 'cloudflare') {
-    const account = body.cloudflare && body.cloudflare.accountId;
-    if (!account) return []; // binding mode: no live listing; UI falls back to catalog
-    if (!key) return [];
-    res = await fetch(BASE.cloudflare + '/accounts/' + encodeURIComponent(account) + '/ai/models?render=slim', {
-      headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(timeoutMs),
-    });
-    data = await res.json().catch(() => null);
-    if (!res.ok) throw httpError(res.status, 'LIST_FAILED', 'Gagal memuat model Cloudflare');
-    return ((data && data.result) || [])
-      .filter(m => (m.properties && m.properties.capabilities && m.properties.capabilities.includes('text')) || /text/.test((m.properties && m.properties.capabilities || []).join(' ')))
-      .map(m => ({ id: m.name, displayName: (m.description || m.name) + ' (' + m.name + ')', contextLength: m.properties && m.properties.context_length, maxTokens: m.properties && m.properties.max_tokens }));
   }
   // custom
   const baseUrl = buildOpenAIBase('custom', body, null);
@@ -380,7 +310,7 @@ async function handleEdit(req, env) {
   const maxTokens = Number.isFinite(body.maxOutputTokens) ? Math.max(256, Math.min(32768, Math.round(body.maxOutputTokens))) : 8192;
 
   // provider-specific extras
-  let cfAccount = null, customBaseUrl = null, customFormat = 'openai';
+  let customBaseUrl = null, customFormat = 'openai';
   if (provider === 'custom') {
     customBaseUrl = String((body.custom && body.custom.baseUrl) || '').trim();
     if (!customBaseUrl) throw httpError(400, 'NO_CUSTOM_URL', 'Custom butuh baseUrl');
@@ -408,8 +338,8 @@ async function handleEdit(req, env) {
     const key = env.DEFAULT_API_KEY || '';
     try {
       const { text: out, usage } = await dispatch({
-        provider, model, key, cfAccount: null, customBaseUrl, customFormat,
-        system, userMsg, temperature, maxTokens, timeoutMs, env,
+        provider, model, key, customBaseUrl, customFormat,
+        system, userMsg, temperature, maxTokens, timeoutMs,
       });
       return json({ ok: true, provider, model, serverKey: true, keyUsed: -1, keyCount: 0, raw: out, usage: usage || null });
     } catch (e) {
@@ -425,7 +355,7 @@ async function handleEdit(req, env) {
     const key = keys[idx];
     try {
       const { text: out, usage } = await dispatch({
-        provider, model, key, cfAccount, customBaseUrl, customFormat,
+        provider, model, key, customBaseUrl, customFormat,
         system, userMsg, temperature, maxTokens, timeoutMs,
       });
       return json({
@@ -484,16 +414,12 @@ function assembleUserMessage(text, continueFromPage) {
 }
 
 async function handleModels(req, env) {
-  const url = new URL(req.url);
-  const provider = (url.searchParams.get('provider') || '').toLowerCase();
+  let body;
+  try { body = await req.json(); } catch { throw httpError(400, 'BAD_JSON', 'Body harus JSON valid'); }
+  const provider = String(body.provider || '').toLowerCase();
   if (!PROVIDERS.includes(provider)) throw httpError(400, 'BAD_PROVIDER', 'Provider tidak dikenal');
-  const keys = JSON.parse(url.searchParams.get('keys') || '[]');
-  const key = Array.isArray(keys) ? String(keys[0] || '') : '';
-  const body = {};
-  // searchParams.get() already percent-decodes once; do NOT decode again.
-  const cf = url.searchParams.get('cf');
-  const cust = url.searchParams.get('cust');
-  if (cust) body.custom = JSON.parse(cust);
+  const keys = Array.isArray(body.keys) ? body.keys.map(k => String(k || '').trim()).filter(Boolean) : [];
+  const key = keys[0] || '';
   if (provider === 'default') {
     // server key mode: use env key, no user keys needed
     const srvKey = env.DEFAULT_API_KEY || '';
@@ -599,7 +525,7 @@ export default {
       try {
         let resp;
         if (method === 'GET' && path === '/api/health') resp = await handleHealth(req, env);
-        else if (method === 'GET' && path === '/api/models') resp = await handleModels(req, env);
+        else if (method === 'POST' && path === '/api/models') resp = await handleModels(req, env);
         else if (method === 'GET' && path === '/api/prompt') { const m = await import('./prompts.js'); resp = m.handlePrompt(req, env); }
         else if (method === 'GET' && path === '/api/sample') { const m = await import('./prompts.js'); resp = m.handleSample(req, env); }
         else if (method === 'POST' && path === '/api/ping') resp = await handlePing(req, env);

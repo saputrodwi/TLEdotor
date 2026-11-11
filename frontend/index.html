@@ -1,36 +1,42 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TL Editor</title>
-  <meta name="color-scheme" content="dark" />
   <meta name="description" content="Penyunting hasil terjemahan komik / light novel bahasa Indonesia, ditenagai AI. Istilah Inggris dipertahankan." />
+  <meta name="theme-color" content="#0e0f13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' fill='white' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=7" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f5a623'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' fill='%230e0f13' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css?v=8" />
+  <script src="./theme.js?v=8"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="mark">TL</span><b>TL Editor</b></div>
-    <div class="topbar-right"></div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="themeToggle" title="Ganti tampilan (siklus: sistem → terang → gelap)" aria-label="Ganti tema">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>
+      </button>
+    </div>
   </header>
 
   <nav class="tabbar" role="tablist">
-    <button class="tab-item active" data-view="sunting">Sunting</button>
-    <button class="tab-item" data-view="pengaturan">Pengaturan</button>
+    <button class="tab-item active" role="tab" data-view="sunting">Sunting</button>
+    <button class="tab-item" role="tab" data-view="pengaturan">Pengaturan</button>
   </nav>
 
   <main class="wrap">
     <!-- ============ SUNTING ============ -->
     <section id="view-sunting" class="view">
       <!-- source input -->
-      <div class="card src-card">
+      <div class="card">
+        <div class="card-head"><h3>Terjemahan (.txt)</h3><span class="mini-badge" id="srcBadge">0 baris</span></div>
         <div class="src-actions">
           <button class="btn-primary file-btn" id="btnChooseFile">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1v9m0 0L5 7m3 3l3-3M2 13h12"/></svg>
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1v9m0 0L5 7m3 3l3-3M2 13h12"/></svg>
             Pilih file .txt
           </button>
           <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
@@ -38,7 +44,6 @@
           <button class="ghost-btn tiny" id="btnSample">Contoh</button>
           <button class="ghost-btn tiny" id="btnNormalize">Rapi</button>
           <button class="ghost-btn tiny" id="btnClearSource">Bersihkan</button>
-          <label class="check"><input type="checkbox" id="lineNumbers" checked /><span>Baris</span></label>
         </div>
 
         <div class="src-area" id="srcArea">
@@ -49,12 +54,10 @@
         </div>
 
         <div class="src-status">
-          <span class="stat" id="statLines">0 baris</span>
           <span class="stat" id="statPages">0 halaman</span>
           <span class="stat" id="statChars">0 karakter</span>
           <span class="stat accent" id="statTokens">~0 token</span>
         </div>
-
       </div>
 
       <!-- run bar -->
@@ -62,46 +65,43 @@
         <div class="rb-line">
           <span class="rb-lbl">Provider</span>
           <b id="runProviderLabel" class="rb-val">Default</b>
-          <button class="link-btn" id="btnToSettings">ubah →</button>
+          <button class="link-btn" id="btnToSettings">ubah</button>
         </div>
         <div class="rb-line">
           <div class="rb-model">
-            <button class="model-trigger" id="modelTrigger">Model B</button>
-            <div class="model-popup hidden" id="modelPopup"></div>
+            <button class="model-trigger" id="modelTrigger" aria-haspopup="listbox">Model B<span class="chev">▾</span></button>
+            <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
             <button class="ghost-btn tiny" id="btnLoadModels">Muat</button>
           </div>
         </div>
         <div class="model-list" id="modelList"></div>
         <div class="rb-line rb-bottom">
-          <div class="rp-mini"><span>Temp</span><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.2" /><output id="tempVal">0.2</output></div>
+          <div class="rp-mini"><span>Temp</span><input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" /><output id="tempVal">0.5</output></div>
           <div class="rp-mini"><span>Tokens</span><input id="maxTokens" type="number" class="mono" value="8192" min="256" max="32768" step="256" /></div>
-          <button id="btnRun" class="btn-primary run"><span id="runBtnLabel">Jalankan</span></button>
+          <button id="btnRun" class="btn-primary run">
+            <svg class="play" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+            <span id="runBtnLabel">Jalankan</span>
+          </button>
         </div>
         <div class="run-progress" id="runProgress"><i></i></div>
       </div>
 
       <div class="run-status hidden" id="runStatus" role="status"><span class="spinner hidden" id="runSpinner"></span><span id="runStatusTxt"></span></div>
 
-      <!-- results: Ocrku-style (Hasil + Perubahan + Perlu dicek) -->
+      <!-- results: Hasil + Perubahan + Perlu dicek -->
       <div class="card results hidden" id="resultsCard">
-        <div class="res-header">
-          <b>Hasil</b>
-          <label class="check"><input type="checkbox" id="diffMode" checked /><span>diff</span></label>
+        <div class="card-head res-head">
+          <h3>Hasil</h3>
+          <label class="check ml-auto"><input type="checkbox" id="diffMode" checked /><span>diff</span></label>
           <button class="ghost-btn tiny" id="btnCopyResult">Salin</button>
           <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
         </div>
-        <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik "Jalankan" dulu.</code></pre>
+        <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik “Jalankan” dulu.</code></pre>
 
-        <div class="res-header res-sep">
-          <b>Perubahan</b>
-          <span class="mini-badge" id="chgBadge">0</span>
-        </div>
+        <div class="card-head res-sep"><h3>Perubahan</h3><span class="mini-badge" id="chgBadge">0</span></div>
         <div class="list-scroll" id="resultChanges"><div class="empty-note">Belum ada hasil.</div></div>
 
-        <div class="res-header res-sep">
-          <b>Perlu dicek</b>
-          <span class="mini-badge warn" id="revBadge">0</span>
-        </div>
+        <div class="card-head res-sep"><h3>Perlu dicek</h3><span class="mini-badge warn" id="revBadge">0</span></div>
         <div class="list-scroll" id="resultReview"><div class="empty-note">Belum ada hasil.</div></div>
       </div>
     </section>
@@ -109,71 +109,46 @@
     <!-- ============ PENGATURAN ============ -->
     <section id="view-pengaturan" class="view hidden">
       <div class="card">
-        <div class="card-head"><h3>Provider</h3><button class="ghost-btn tiny" id="btnBackSunting">← Sunting</button></div>
+        <div class="card-head"><h3>Provider</h3><button class="link-btn" id="btnBackSunting">← Sunting</button></div>
         <div id="providerTiles" class="provider-tiles"></div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Kunci &amp; Model</h3><span class="mini-badge" id="keyCount">0 aktif</span></div>
-        <div class="field-label" style="margin-top:0">API key — <b id="provKeyLabel">Default</b></div>
-        <div class="key-actions"><button class="ghost-btn" id="btnAddKey">+ Tambah kunci</button><button class="ghost-btn" id="btnPingAll">Tes koneksi</button></div>
-        <div id="kunciList" class="key-list"></div>
+        <div class="card-head"><h3>Kunci &amp; Model</h3><span class="mini-badge" id="keyCount">0 kunci</span></div>
+        <div id="keyCardBody"></div>
         <div id="pingResults" class="ping-results hidden"></div>
-
-        <div id="customWrap" class="hidden">
-          <label class="field-label">Base URL (OpenAI-compatible, HTTPS)</label>
-          <input id="customBaseUrl" class="input" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
-          <div class="seg-tabs" id="customFormatTabs"><button class="seg-tab" data-cf="openai">OpenAI</button><button class="seg-tab" data-cf="gemini">Gemini</button></div>
-        </div>
-        <p class="sec-note" id="keyEncryptionNote">Tersimpan terenkripsi (AES-GCM), hanya di perangkat.</p>
+        <p class="sec-note" id="keyNote"><b>Catatan:</b> kunci tersimpan hanya di browser ini (localStorage) dan dikirim lewat HTTPS hanya ke Worker-mu; tidak pernah masuk log server. Provider <b>Default</b> memakai kunci di server — tanpa input.</p>
       </div>
 
       <div class="card">
         <div class="card-head"><h3>System Prompt</h3><button class="ghost-btn tiny" id="btnTogglePrompt">Perinci</button></div>
         <div class="prompt-summary" id="promptSummary">Menyunting hasil terjemahan (bukan menerjemahkan ulang): makna → typo → naturalitas → efisiensi; pertahankan struktur, istilah Inggris &amp; kata ganti; output 3 bagian.</div>
         <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10"></textarea>
-        <div class="prompt-tools"><button class="ghost-btn tiny" id="btnReloadPrompt">Muat ulang</button><button class="ghost-btn tiny" id="btnResetPrompt">Reset</button><span class="muted" id="promptChars"></span></div>
+        <div class="prompt-tools"><button class="ghost-btn tiny" id="btnReloadPrompt">Muat bawaan</button><button class="ghost-btn tiny" id="btnResetPrompt">Reset</button><span class="muted" id="promptChars"></span></div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Keamanan</h3><span class="mini-badge" id="vaultState">belum dibuka</span></div>
-        <div class="sec-field"><label class="field-label">Mode penyimpanan</label>
-          <div class="seg-tabs" id="storageMode"><button class="seg-tab active" data-mode="device">Perangkat (enkripsi)</button><button class="seg-tab" data-mode="session">Hanya sesi</button></div>
+        <div class="card-head"><h3>Tampilan</h3></div>
+        <div class="theme-seg" id="themeSeg">
+          <button class="seg-tab" data-tseg="system">Sistem</button>
+          <button class="seg-tab" data-tseg="light">Terang</button>
+          <button class="seg-tab" data-tseg="dark">Gelap</button>
         </div>
-        <div id="vaultUnlockWrap"><label class="field-label">Passphrase</label>
-          <div class="pass-row"><input id="unlockPass" class="input" type="password" autocomplete="off" placeholder="passphrase…" /><button class="ghost-btn" id="btnUnlock">Buka</button></div>
-        </div>
-        <div class="sec-tools">
-          <button class="ghost-btn" id="btnLock">Kunci dari memori</button>
-          <button class="ghost-btn danger" id="btnWipeVault">Hapus semua kunci</button>
-        </div>
-        <div class="sec-checklist"><ul id="secChecklist"></ul></div>
+        <p class="hint">“Sistem” mengikuti preferensi perangkat; pilihan tersimpan di browser.</p>
       </div>
 
-      <div class="card guide-body">
-        <h3>Panduan singkat</h3>
-        <ol>
+      <div class="card">
+        <div class="card-head"><h3>Panduan singkat</h3></div>
+        <ol class="guide-body">
           <li>Di <b>Sunting</b>: klik “Pilih file .txt” atau tempel langsung.</li>
-          <li>Klik <b>Jalankan</b> → hasil muncul di bawah.</li>
+          <li>Klik <b>Jalankan</b> → hasil, perubahan, dan yang perlu dicek muncul di bawah.</li>
           <li>Provider, kunci, model di tab <b>Pengaturan</b>.</li>
         </ol>
       </div>
     </section>
   </main>
 
-  <!-- passphrase first-use -->
-  <div id="passModal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head"><h3>Aman kunci API</h3></div>
-      <p class="muted">Passphrase mengenkripsi (AES-GCM) semua kunci di perangkat. Tidak bisa dipulihkan bila lupa.</p>
-      <input id="pass1" class="input" type="password" placeholder="Passphrase (min. 8 karakter)" autocomplete="off" />
-      <input id="pass2" class="input" type="password" placeholder="Ulangi passphrase" autocomplete="off" />
-      <div class="modal-foot"><button class="ghost-btn" id="passSkip">Lewati (hanya sesi)</button><button class="btn-primary" id="passCreate">Kunci &amp; simpan</button></div>
-    </div>
-  </div>
-
   <div id="toast" class="toast hidden"></div>
-  <footer class="app-footer"></footer>
-  <script src="./app.js?v=7"></script>
+  <script src="./app.js?v=8"></script>
 </body>
 </html>

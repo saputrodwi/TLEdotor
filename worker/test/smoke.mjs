@@ -115,6 +115,9 @@ mockFetch((u) => okRes({ choices: [] }));
   let r = await call(req('/api/edit', { method: 'POST', body: { provider: 'nope', model: 'x', keys: ['sk-testkey1234'], text: 'P1' } }));
   check('bad provider -> 400', r.status === 400 && r.body.code === 'BAD_PROVIDER');
 
+  r = await call(req('/api/edit', { method: 'POST', body: { provider: 'cloudflare', model: 'x', keys: ['k'], text: 'P1' } }));
+  check('cloudflare provider rejected -> 400', r.status === 400 && r.body.code === 'BAD_PROVIDER');
+
   r = await call(req('/api/edit', { method: 'POST', body: { provider: 'gemini', model: 'm', keys: [], text: 'P1' } }));
   check('no keys -> 400', r.status === 400 && r.body.code === 'NO_KEYS');
 
@@ -184,9 +187,8 @@ mockFetch((u) => {
   return okRes({});
 });
 {
-  const qs = '/api/models?provider=sumopod&keys=' + encodeURIComponent(JSON.stringify(['k']));
-  const r = await call(req(qs));
-  check('models 200', r.status === 200, 'status=' + r.status);
+  const r = await call(req('/api/models', { method: 'POST', body: { provider: 'sumopod', keys: ['k'] } }));
+  check('models POST 200', r.status === 200, 'status=' + r.status);
   check('models returns ids', Array.isArray(r.body.models) && r.body.models[0].id === 'gpt-4o-mini');
 
   const p = await call(req('/api/ping', { method: 'POST', body: { provider: 'sumopod', keys: ['sk-testkey1234'] } }));
