@@ -1,70 +1,60 @@
-/* ============================================================
-   TL Editor — frontend logic (Lentera, 2-tab input-first)
-   Sunting tab: input + run bar + results (inline)
-   Pengaturan tab: provider, keys, model, prompt, tampilan
-   Cloudflare Pages (static) -> Pages Function -> Worker
-   Storage: plaintext localStorage (tanpa vault).
-   HTTPS-only. Key tidak pernah masuk log server.
-   ============================================================ */
+/* TL Editor — total frontend logic.
+   UI: Sunting utama, Pengaturan panel sekunder.
+   Rules: nomor baris selalu tampil, diff selalu aktif, tanpa Contoh/Rapi.
+*/
 (() => {
 'use strict';
 
-/* ---------- tiny DOM helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 function el(tag, attrs = {}, ...kids) {
-  const e = document.createElement(tag);
+  const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') e.className = v;
-    else if (k === 'dataset') Object.assign(e.dataset, v);
-    else if (k.startsWith('on')) e[k] = v;
-    else e.setAttribute(k, v);
+    if (k === 'class') node.className = v;
+    else if (k === 'dataset') Object.assign(node.dataset, v);
+    else node.setAttribute(k, v);
   }
-  for (const c of kids.flat()) { if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); }
-  return e;
+  for (const child of kids.flat()) {
+    if (child != null) node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return node;
 }
 function toast(msg, kind = '') {
   const t = $('#toast');
-  t.textContent = msg; t.className = 'toast ' + kind;
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'toast ' + kind;
   t.classList.remove('hidden');
-  clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2600);
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), 2400);
 }
 
-/* ---------- provider catalog ---------- */
 const PROVIDERS = {
   gemini: {
-    label: 'Gemini', icon: 'G', tag: 'Gemini 3.5 Flash Lite',
-    keyLabel: 'Gemini API Key', multiKey: true,
+    label: 'Gemini', tag: 'Gemini Flash', multiKey: true,
     models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.8-live', 'gemini-3.8-flash-lite-tts'],
-    keyHint: 'Mulai dengan AIza…',
-    keyRe: /^[A-Za-z0-9_\-./+]{8,}$/
+    modelLabels: { 'gemini-3.5-flash-lite': 'Flash Lite', 'gemini-3.8-flash': 'Flash', 'gemini-3.8-live': 'Live', 'gemini-3.8-flash-lite-tts': 'Flash Lite TTS' },
+    keyHint: 'Mulai dengan AIza…'
   },
   default: {
-    label: 'Default', icon: 'D', tag: 'Server key',
-    keyLabel: '', multiKey: false, serverKey: true,
+    label: 'Default', tag: 'Kunci server', serverKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
     modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
-    keyHint: 'Kunci di server. Tanpa input.',
-    keyRe: null
+    keyHint: 'Kunci di server. Tanpa input.'
   },
   sumopod: {
-    label: 'Sumopod', icon: 'S', tag: 'ai.sumopod.com',
-    keyLabel: 'Sumopod API Key', multiKey: true,
+    label: 'Sumopod', tag: 'ai.sumopod.com', multiKey: true,
     models: ['gpt-4o-mini', 'gpt-4o', 'claude-3-5-sonnet', 'deepseek-chat'],
-    keyHint: 'Base https://ai.sumopod.com/v1',
-    keyRe: /^[A-Za-z0-9_\-]{8,}$/
+    keyHint: 'Base https://ai.sumopod.com/v1'
   },
   custom: {
-    label: 'Custom', icon: 'C', tag: 'OpenAI-compatible',
-    keyLabel: 'API Key', multiKey: true, needsUrl: true,
+    label: 'Custom', tag: 'OpenAI / Gemini', multiKey: true, needsUrl: true,
     models: [],
-    keyHint: 'Isi Base URL + model. Format OpenAI (default) atau Gemini.',
-    keyRe: /^[A-Za-z0-9_\-/.+]{6,}$/
-  },
+    keyHint: 'Isi base URL + model di panel Pengaturan.'
+  }
 };
 const PROVIDER_IDS = Object.keys(PROVIDERS);
 
-/* ---------- state ---------- */
 const state = {
   provider: 'default',
   keys: { gemini: [], default: [], sumopod: [], custom: [] },
@@ -75,10 +65,9 @@ const state = {
   theme: 'system',
   systemPrompt: '',
   lastResult: null,
-  lastRun: null,
+  lastRun: null
 };
 
-/* ---------- storage (plaintext, tanpa vault) ---------- */
 const LS_SETTINGS = 'tl.settings.v2';
 const LS_KEYS = 'tl.keys.v2';
 const LS_THEME = 'tl.theme';
@@ -91,9 +80,9 @@ function saveSettings() {
       temperature: state.temperature,
       maxTokens: state.maxTokens,
       custom: state.custom,
-      systemPrompt: state.systemPrompt,
+      systemPrompt: state.systemPrompt
     }));
-  } catch { /* quota */ }
+  } catch {}
 }
 function loadSettings() {
   try {
@@ -105,14 +94,14 @@ function loadSettings() {
     state.maxTokens = s.maxTokens ?? 8192;
     state.custom = Object.assign(state.custom, s.custom || {});
     if (typeof s.systemPrompt === 'string' && s.systemPrompt) state.systemPrompt = s.systemPrompt;
-  } catch { /* corrupt -> defaults */ }
+  } catch {}
 }
 function saveKeys() {
   try {
     const o = {};
-    for (const p of PROVIDER_IDS) o[p] = state.keys[p].map(k => k.value).filter(Boolean);
+    for (const p of PROVIDER_IDS) o[p] = (state.keys[p] || []).map(k => k.value).filter(Boolean);
     localStorage.setItem(LS_KEYS, JSON.stringify(o));
-  } catch { /* quota */ }
+  } catch {}
 }
 function loadKeys() {
   try {
@@ -120,74 +109,108 @@ function loadKeys() {
     if (!o) return;
     for (const p of PROVIDER_IDS) {
       const arr = Array.isArray(o[p]) ? o[p] : [];
-      state.keys[p] = arr.map(v => ({ id: 'k' + Math.random().toString(36).slice(2, 9), value: String(v), shown: false }));
+      state.keys[p] = arr.map((v, i) => ({ id: 'k' + i + '-' + Math.random().toString(36).slice(2, 7), value: String(v), shown: false }));
     }
-  } catch { /* corrupt -> empty */ }
+  } catch {}
 }
 function autoSave() { saveSettings(); saveKeys(); }
+function currentKeys(provider = state.provider) {
+  return (state.keys[provider] || []).map(k => k.value).filter(Boolean);
+}
 
-/* ---------- theme (Lentera: sistem / terang / gelap) ---------- */
+/* Theme */
 const THEME_ICONS = {
-  system: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>',
-  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>',
-  dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" width="16" height="16"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>',
+  system: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>',
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>',
+  dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>'
 };
-function resolveTheme(pref) {
-  if (pref === 'light') return 'light';
-  if (pref === 'dark') return 'dark';
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
 function applyTheme() {
-  document.documentElement.dataset.theme = resolveTheme(state.theme);
-  document.querySelector('meta[name="theme-color"]').setAttribute('content',
-    document.documentElement.dataset.theme === 'dark' ? '#0e0f13' : '#f5f1ea');
+  const resolved = state.theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : state.theme;
+  document.documentElement.dataset.theme = resolved;
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', resolved === 'dark' ? '#0d0e11' : '#f4efe6');
   const icon = $('#themeIcon');
-  if (icon) {
-    icon.className = 'theme-icon ' + state.theme;
-    icon.innerHTML = THEME_ICONS[state.theme];
-  }
-  const label = $('#themeLabel');
-  if (label) label.textContent = 'Tema: ' + ({ system: 'sistem', light: 'terang', dark: 'gelap' })[state.theme];
-  $$('#themeSeg .seg-tab').forEach(b => b.classList.toggle('active', b.dataset.tseg === state.theme));
-  try { localStorage.setItem(LS_THEME, state.theme); } catch { /* ignore */ }
+  if (icon) icon.innerHTML = THEME_ICONS[state.theme];
+  $$('#themeOptions .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === state.theme));
+  try { localStorage.setItem(LS_THEME, state.theme); } catch {}
 }
+try { state.theme = localStorage.getItem(LS_THEME) || 'system'; } catch {}
+applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.theme === 'system') applyTheme(); });
 $('#themeToggle').onclick = () => {
   state.theme = state.theme === 'system' ? 'light' : state.theme === 'light' ? 'dark' : 'system';
   applyTheme();
-  toast('Tampilan: ' + ({ system: 'ikuti sistem', light: 'terang', dark: 'gelap' })[state.theme]);
+  toast('Tema: ' + state.theme, 'ok');
 };
-$$('#themeSeg .seg-tab').forEach(b => b.onclick = () => { state.theme = b.dataset.tseg; applyTheme(); });
-try { state.theme = localStorage.getItem(LS_THEME) || 'system'; } catch { /* default */ }
-applyTheme();
+$$('#themeOptions .seg-btn').forEach(b => b.onclick = () => { state.theme = b.dataset.theme; applyTheme(); });
 
-/* ---------- view switching (Sunting utama, Pengaturan drawer) ---------- */
-function switchView(name) {
-  const sunting = $('#view-sunting');
-  const settings = $('#view-pengaturan');
-  if (sunting) sunting.classList.add('active');
-  if (settings) settings.classList.toggle('active', name === 'pengaturan');
-  document.body.classList.toggle('settings-open', name === 'pengaturan');
-  if (name === 'pengaturan') window.scrollTo({ top: 0, behavior: 'auto' });
+/* Settings overlay */
+function openSettings() {
+  $('#settingsOverlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 }
-if ($('#btnOpenSettings')) $('#btnOpenSettings').onclick = () => switchView('pengaturan');
-if ($('#btnToSettings')) $('#btnToSettings').onclick = () => switchView('pengaturan');
-if ($('#btnBackSunting')) $('#btnBackSunting').onclick = () => switchView('sunting');
-$$('[data-close-settings]').forEach(el => el.addEventListener('click', () => switchView('sunting')));
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.body.classList.contains('settings-open')) switchView('sunting');
+function closeSettings() {
+  $('#settingsOverlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+$$('[data-open-settings]').forEach(b => b.onclick = openSettings);
+$$('[data-close-settings]').forEach(b => b.onclick = closeSettings);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#settingsOverlay').classList.contains('hidden')) closeSettings(); });
+
+/* Source */
+function updateSourceStats() {
+  const t = $('#txtPaste').value;
+  const lines = t ? t.split('\n').filter(Boolean).length : 0;
+  const pages = (t.match(/^\s*P\d+/gm) || []).length;
+  $('#srcMeta').textContent = `${lines} baris · ${pages} halaman · ${t.length.toLocaleString('en-US')} karakter`;
+  updateLineNumbers();
+}
+function updateLineNumbers() {
+  const g = $('#lineGutter');
+  const n = $('#txtPaste').value.split('\n').length;
+  let out = '';
+  for (let i = 1; i <= n; i++) out += String(i).padStart(2, '0') + '\n';
+  g.textContent = out.trimEnd();
+}
+$('#txtPaste').addEventListener('input', updateSourceStats);
+$('#txtPaste').addEventListener('scroll', () => {
+  $('#lineGutter').scrollTop = $('#txtPaste').scrollTop;
+});
+$('#btnChooseFile').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  $('#txtPaste').value = await f.text();
+  updateSourceStats();
+  toast(`File “${f.name}” dimuat`, 'ok');
+  e.target.value = '';
+};
+$('#btnClearSource').onclick = () => {
+  $('#txtPaste').value = '';
+  updateSourceStats();
+};
+const editorArea = $('#editorArea');
+['dragover', 'drop'].forEach(ev => editorArea.addEventListener(ev, e => e.preventDefault()));
+editorArea.addEventListener('drop', async e => {
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  if (!/\.txt$|text\/plain/i.test(f.name)) return toast('Hanya file .txt', 'err');
+  $('#txtPaste').value = await f.text();
+  updateSourceStats();
+  toast('Dimuat: ' + f.name, 'ok');
 });
 
-/* ---------- provider tiles ---------- */
+/* Provider tiles */
 function renderProviderTiles() {
-  const wrap = $('#providerTiles'); wrap.innerHTML = '';
+  const wrap = $('#providerList');
+  wrap.innerHTML = '';
   PROVIDER_IDS.forEach(id => {
     const p = PROVIDERS[id];
-    const active = state.provider === id;
-    const b = el('button', { class: 'ptile' + (active ? ' active' : ''), title: p.keyHint },
-      el('span', { class: 'pico' }, p.icon),
-      el('span', { class: 'pname' }, p.label),
-      el('span', { class: 'ptag' }, p.tag),
+    const b = el('button', {
+      class: 'provider-tile' + (state.provider === id ? ' active' : ''),
+      type: 'button'
+    },
+      el('b', {}, p.label),
+      el('span', {}, p.tag)
     );
     b.onclick = () => selectProvider(id);
     wrap.append(b);
@@ -198,296 +221,212 @@ function selectProvider(id) {
   renderProviderTiles();
   syncProviderUI();
   renderKeyCard();
-  renderModelSelect();
+  rebuildModelPopup();
+  updateModelTrigger();
   autoSave();
 }
 function syncProviderUI() {
   const p = PROVIDERS[state.provider];
-  const cw = $('#customWrap');
-  if (cw) cw.classList.toggle('hidden', state.provider !== 'custom');
-  const cu = $('#customBaseUrl');
-  if (cu) cu.value = state.custom.baseUrl;
-  $$('#customFormatTabs [data-cf]').forEach(b => b.classList.toggle('active', b.dataset.cf === state.custom.format));
+  $('#providerName').textContent = p.label;
+  $('#customPanel').classList.toggle('hidden', state.provider !== 'custom');
+  const url = $('#customBaseUrl');
+  if (url) url.value = state.custom.baseUrl;
+  $$('#customFormat .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.format === state.custom.format));
   const cm = $('#customModel');
   if (cm) cm.value = state.models.custom || '';
-  if ($('#runProviderLabel')) $('#runProviderLabel').textContent = p.label;
 }
-
-/* ---------- model select ---------- */
-function setTrigger(label) {
-  const trigger = $('#modelTrigger');
-  trigger.textContent = '';
-  trigger.append(document.createTextNode(label), el('span', { class: 'chev' }, '▾'));
-}
-function renderModelSelect() {
-  const p = PROVIDERS[state.provider];
-  const popup = $('#modelPopup'); popup.innerHTML = '';
-  (p.models || []).forEach(m => {
-    const label = (p.modelLabels && p.modelLabels[m]) || m;
-    const opt = el('button', { class: 'mopt' + (state.models[state.provider] === m ? ' sel' : ''), role: 'option' }, label);
-    opt.onclick = (e) => {
-      e.stopPropagation();
-      state.models[state.provider] = m;
-      setTrigger(label);
-      $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
-      opt.classList.add('sel');
-      popup.classList.add('hidden');
-      autoSave();
-    };
-    popup.append(opt);
-  });
-  if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
-  const cur = p.modelLabels && p.modelLabels[state.models[state.provider]] ? p.modelLabels[state.models[state.provider]] : state.models[state.provider];
-  setTrigger(cur || '— pilih model —');
-}
-$('#modelTrigger').onclick = (e) => {
-  e.stopPropagation();
-  $('#modelPopup').classList.toggle('hidden');
-};
-document.addEventListener('click', (e) => {
-  const popup = $('#modelPopup');
-  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.model-control')) popup.classList.add('hidden');
+$('#customBaseUrl').addEventListener('input', e => { state.custom.baseUrl = e.target.value.trim(); autoSave(); });
+$$('#customFormat .seg-btn').forEach(b => b.onclick = () => {
+  state.custom.format = b.dataset.format;
+  $$('#customFormat .seg-btn').forEach(x => x.classList.toggle('active', x === b));
+  autoSave();
+});
+$('#customModel').addEventListener('input', e => {
+  state.models.custom = e.target.value.trim();
+  updateModelTrigger();
+  autoSave();
 });
 
-/* ---------- keys UI (ringkas, plaintext) ---------- */
-function currentKeyValues(p) { return state.keys[p].map(k => k.value).filter(Boolean); }
+/* Keys */
 function renderKeyCard() {
-  const box = $('#keyCardBody'); box.innerHTML = '';
+  const box = $('#keyCard');
+  box.innerHTML = '';
   const p = PROVIDERS[state.provider];
-  const keys = currentKeyValues(state.provider);
-  $('#keyCount').textContent = (p.serverKey ? 'server key' : keys.length + ' kunci');
-
-  const foot = el('div', { class: 'key-foot' });
-  foot.append(el('button', { class: 'ghost-btn', id: 'btnPingAll' }, 'Tes koneksi'));
+  const keys = currentKeys();
+  $('#keyCount').textContent = p.serverKey ? 'server key' : keys.length + ' kunci';
 
   if (p.serverKey) {
-    box.append(el('div', { class: 'field-label' }, 'API key — ' + p.label));
-    box.append(el('div', { class: 'key-state ok' }, el('span', { class: 'dot' }), 'Kunci di server (Worker) — tanpa input apa pun.'));
-    box.append(foot);
+    box.append(el('p', { class: 'note' }, 'Provider Default memakai kunci di server. Tanpa input apa pun.'));
   } else {
-    box.append(el('div', { class: 'field-label' }, 'API key — ' + p.label + (p.multiKey ? ' (pisahkan dengan koma untuk rotasi)' : '')));
-    const inp = el('input', {
-      class: 'input', id: 'keyInput', type: 'text', spellcheck: 'false', autocomplete: 'off',
+    box.append(el('label', { class: 'field-label', for: 'keyInput' }, 'API key — ' + p.label + (p.multiKey ? ' · pisahkan dengan koma' : '')));
+    const input = el('input', {
+      id: 'keyInput',
+      class: 'field',
+      type: 'text',
       placeholder: p.keyHint || 'masukkan api key…',
-      value: state.keys[state.provider].map(k => k.value).join(', '),
+      value: keys.join(', '),
+      autocomplete: 'off',
+      spellcheck: 'false'
     });
-    inp.addEventListener('input', () => {
-      const parts = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+    input.addEventListener('input', () => {
+      const parts = input.value.split(',').map(s => s.trim()).filter(Boolean);
       state.keys[state.provider] = parts.map((v, i) => ({ id: 'k' + i + '-' + Math.random().toString(36).slice(2, 6), value: v, shown: false }));
       $('#keyCount').textContent = parts.length + ' kunci';
       autoSave();
     });
-    box.append(inp);
-    if (keys.length) foot.append(el('span', { class: 'key-state' }, el('span', { class: 'dot' }), keys.length + ' tersimpan di browser'));
-    box.append(foot);
+    box.append(input);
   }
 
-  if (state.provider === 'custom') {
-    const wrap = el('div', { id: 'customWrap' });
-    wrap.append(el('label', { class: 'field-label' }, 'Base URL (OpenAI-compatible, HTTPS)'));
-    const url = el('input', { id: 'customBaseUrl', class: 'input', placeholder: 'https://host.example.com/v1', autocomplete: 'off', spellcheck: 'false', value: state.custom.baseUrl });
-    url.addEventListener('input', () => { state.custom.baseUrl = url.value.trim(); autoSave(); });
-    wrap.append(url);
-    const seg = el('div', { class: 'seg-tabs custom-format-tabs', id: 'customFormatTabs' });
-    ['openai', 'gemini'].forEach(cf => seg.append(el('button', { class: 'seg-tab' + (state.custom.format === cf ? ' active' : ''), 'data-cf': cf }, cf === 'openai' ? 'OpenAI' : 'Gemini')));
-    wrap.append(seg);
-    $$('#customFormatTabs .seg-tab').forEach(b => b.onclick = () => {
-      state.custom.format = b.dataset.cf;
-      syncProviderUI(); autoSave();
-    });
-    wrap.append(el('label', { class: 'field-label' }, 'Model (isi manual atau Muat)'));
-    const modelInp = el('input', {
-      id: 'customModel',
-      class: 'input',
-      placeholder: 'nama-model',
-      autocomplete: 'off',
-      spellcheck: 'false',
-      value: state.models.custom || '',
-    });
-    modelInp.addEventListener('input', () => {
-      state.models.custom = modelInp.value.trim();
-      renderModelSelect();
-      autoSave();
-    });
-    wrap.append(modelInp);
-    box.append(wrap);
-  }
-
-  $('#btnPingAll').onclick = pingAll;
+  const ping = el('button', { class: 'btn-quiet small', type: 'button' }, 'Tes koneksi');
+  ping.onclick = pingAll;
+  box.append(el('div', { class: 'key-actions' }, ping));
 }
 
-/* ---------- ping ---------- */
+/* Ping */
 async function pingAll() {
   const p = state.provider;
-  const keys = currentKeyValues(p);
+  const keys = currentKeys(p);
   const serverKey = PROVIDERS[p].serverKey;
   if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
-  const box = $('#pingResults'); box.classList.remove('hidden');
-  box.innerHTML = '<div class="muted">' + (serverKey ? 'Menguji server key…' : 'Menguji ' + keys.length + ' key…') + '</div>';
+  const out = $('#pingOut');
+  out.classList.remove('hidden');
+  out.innerHTML = '';
+  out.append(el('p', { class: 'muted' }, serverKey ? 'Menguji server key…' : `Menguji ${keys.length} key…`));
   try {
     const body = { provider: p, model: PROVIDERS[p].models[0] || '', keys };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/ping', body);
-    box.innerHTML = '';
+    out.innerHTML = '';
     if (serverKey) {
-      box.append(el('div', { class: 'ping-row ' + (r.ok ? 'ok' : 'bad') }, el('span', {}, 'Server key'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
-    } else if (r.results) {
-      r.results.forEach(row => {
-        box.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
-          el('span', {}, 'Kunci ' + (row.index + 1)), el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))));
-      });
+      out.append(el('div', { class: 'ping-row ' + (r.ok ? 'ok' : 'bad') }, el('span', {}, 'Server key'), el('span', {}, r.ok ? 'OK' : 'Gagal — ' + (r.message || ''))));
+    } else if (Array.isArray(r.results)) {
+      r.results.forEach(row => out.append(el('div', { class: 'ping-row ' + (row.ok ? 'ok' : 'bad') },
+        el('span', {}, 'Kunci ' + (row.index + 1)),
+        el('span', {}, row.ok ? 'OK' : 'Gagal — ' + (row.detail || row.code))
+      )));
     }
-  } catch (e) { box.innerHTML = ''; box.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message)); }
-}
-
-/* ---------- API (same-origin) ---------- */
-async function apiCall(path, body, method = 'POST') {
-  const headers = {};
-  if (body) headers['Content-Type'] = 'application/json';
-  let res;
-  try {
-    res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch (e) {
-    throw new Error('Tidak bisa menjangkau Worker. (' + e.message + ')');
+    out.innerHTML = '';
+    out.append(el('div', { class: 'ping-row bad' }, 'Gagal: ' + e.message));
   }
-  let data; try { data = await res.json(); } catch { data = { ok: false, code: 'BAD_RESPONSE', message: 'Respon bukan JSON' }; }
-  if (!res.ok) { const e = new Error(data.message || ('HTTP ' + res.status)); e.code = data.code; e.status = res.status; throw e; }
-  return data;
 }
 
-/* ---------- source file handling ---------- */
-function updateSourceStats() {
-  const t = $('#txtPaste').value;
-  const lines = t ? t.split('\n').filter(x => x.length).length : 0;
-  const pages = (t.match(/^\s*P\d+/gm) || []).length;
-  if ($('#srcBadge')) $('#srcBadge').textContent = lines + ' baris';
-  if ($('#statPages')) $('#statPages').textContent = String(pages);
-  if ($('#statChars')) $('#statChars').textContent = t.length.toLocaleString('en-US');
-  if ($('#statTokens')) $('#statTokens').textContent = '~' + Math.round(t.length / 3.5).toLocaleString('en-US');
-  updateLineNumbers();
+/* Models */
+function currentModelLabel() {
+  const p = PROVIDERS[state.provider];
+  const model = state.models[state.provider] || p.models[0] || '';
+  return (p.modelLabels && p.modelLabels[model]) || model || (state.provider === 'custom' ? 'isi di Pengaturan' : 'pilih model');
 }
-function updateLineNumbers() {
-  const g = $('#lineGutter');
-  if (!g) return;
-  const n = $('#txtPaste').value.split('\n').length;
-  let s = '';
-  for (let i = 1; i <= n; i++) s += String(i).padStart(2, '0') + '\n';
-  g.textContent = s.trimEnd();
+function updateModelTrigger() {
+  $('#modelTrigger').textContent = currentModelLabel();
 }
-$('#txtPaste').addEventListener('input', updateSourceStats);
-$('#txtPaste').addEventListener('scroll', () => {
-  const g = $('#lineGutter');
-  if (g) g.scrollTop = $('#txtPaste').scrollTop;
-});
-
-function normalizeText(t) {
-  return t
-    .replace(/\r\n?/g, '\n')
-    .replace(/[\t ]+$/gm, '')
-    .replace(/\n{4,}/g, '\n\n\n')
-    .replace(/[ \t]+(\n)/g, '$1');
+function rebuildModelPopup() {
+  const p = PROVIDERS[state.provider];
+  const popup = $('#modelPopup');
+  popup.innerHTML = '';
+  (p.models || []).forEach(m => popup.append(modelOption(m)));
+  if (!state.models[state.provider]) state.models[state.provider] = p.models[0] || '';
+  updateModelTrigger();
 }
-$('#btnNormalize').onclick = () => { const t = normalizeText($('#txtPaste').value); $('#txtPaste').value = t; updateSourceStats(); toast('Dinormalisasi', 'ok'); };
-$('#btnClearSource').onclick = () => { $('#txtPaste').value = ''; updateSourceStats(); };
-$('#btnSample').onclick = async () => {
-  try { const r = await apiCall('/api/sample', null, 'GET'); $('#txtPaste').value = r.sample; updateSourceStats(); toast('Contoh naskah dimuat', 'ok'); }
-  catch { toast('Gagal memuat contoh', 'err'); }
+function modelOption(id) {
+  const p = PROVIDERS[state.provider];
+  const label = (p.modelLabels && p.modelLabels[id]) || id;
+  const b = el('button', { class: 'mopt' + (state.models[state.provider] === id ? ' active' : ''), type: 'button', role: 'option' }, label);
+  b.onclick = e => {
+    e.stopPropagation();
+    state.models[state.provider] = id;
+    rebuildModelPopup();
+    $('#modelPopup').classList.add('hidden');
+    autoSave();
+    toast('Model: ' + label, 'ok');
+  };
+  return b;
+}
+$('#modelTrigger').onclick = e => {
+  e.stopPropagation();
+  const popup = $('#modelPopup');
+  popup.classList.toggle('hidden');
+  $('#modelTrigger').setAttribute('aria-expanded', String(!popup.classList.contains('hidden')));
 };
-
-/* file button always visible */
-$('#btnChooseFile').onclick = () => $('#fileInput').click();
-$('#fileInput').onchange = async (e) => {
-  const files = e.target.files;
-  if (!files || !files.length) return;
-  const f = files[0];
-  const txt = await f.text();
-  $('#txtPaste').value = txt; updateSourceStats();
-  toast('File "' + f.name + '" dimuat (' + f.size.toLocaleString() + ' bytes)', 'ok');
-  e.target.value = '';
-};
-const srcArea = $('#srcArea');
-['dragover', 'drop'].forEach(ev => srcArea.addEventListener(ev, e => e.preventDefault()));
-srcArea.addEventListener('drop', async e => {
-  const f = e.dataTransfer.files?.[0]; if (!f) return;
-  if (!/\.txt$|text\/plain/i.test(f.name)) return toast('Hanya file .txt', 'err');
-  const txt = await f.text();
-  $('#txtPaste').value = txt; updateSourceStats();
-  toast('Dimuat: ' + f.name, 'ok');
+document.addEventListener('click', e => {
+  const popup = $('#modelPopup');
+  if (popup && !popup.classList.contains('hidden') && !e.target.closest('.model-control')) popup.classList.add('hidden');
 });
-
-/* ---------- model loading ---------- */
 $('#btnLoadModels').onclick = async () => {
   const p = state.provider;
-  const keys = currentKeyValues(p);
+  const keys = currentKeys(p);
   const serverKey = PROVIDERS[p].serverKey;
-  const panel = $('#modelList');
-  if (!serverKey && keys.length === 0) return toast('Isi minimal 1 kunci untuk load model ' + PROVIDERS[p].label, 'err');
-  panel.innerHTML = '';
-  panel.append(el('div', { class: 'model-opt model-note' }, el('span', { class: 'muted' }, 'Memuat daftar ' + PROVIDERS[p].label + '…')));
+  if (!serverKey && !keys.length) return toast('Isi minimal 1 kunci dulu.', 'err');
+  if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom dulu.', 'err');
+  const out = $('#modelPopup');
+  out.classList.remove('hidden');
+  out.innerHTML = '';
+  out.append(el('div', { class: 'mopt' }, 'Memuat daftar model…'));
   try {
     const body = { provider: p, keys };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/models', body, 'POST');
-    const models = r.models || [];
-    panel.innerHTML = '';
-    if (!models.length) { panel.append(el('div', { class: 'model-opt model-note' }, el('span', { class: 'muted' }, serverKey ? 'Pakai daftar di dropdown.' : '0 model via API.'))); return; }
-    models.slice(0, 100).forEach(m => {
-      const label = (PROVIDERS[p].modelLabels && PROVIDERS[p].modelLabels[m.id]) || m.id;
-      const exists = $$('#modelPopup .mopt').some(x => x.dataset.mid === m.id);
-      if (!exists) {
-        const opt = el('button', { class: 'mopt' + (state.models[p] === m.id ? ' sel' : ''), 'data-mid': m.id }, label);
-        opt.onclick = (e) => {
-          e.stopPropagation();
-          state.models[p] = m.id;
-          setTrigger(label);
-          $$('#modelPopup .mopt').forEach(x => x.classList.remove('sel'));
-          opt.classList.add('sel');
-          $('#modelPopup').classList.add('hidden');
-          autoSave();
-        };
-        $('#modelPopup').append(opt);
-      }
-      panel.append(el('div', { class: 'model-opt' + (state.models[p] === m.id ? ' sel' : '') }, el('span', { class: 'mid' }, m.id), el('span', { class: 'mdisp' }, m.displayName || '')));
-    });
-  } catch (e) { panel.innerHTML = ''; panel.append(el('div', { class: 'ping-row bad' }, 'Gagal load model: ' + e.message)); }
+    const known = PROVIDERS[p].models || [];
+    const loaded = (r.models || []).map(m => m.id);
+    const ids = [...new Set([...known, ...loaded])];
+    out.innerHTML = '';
+    if (!ids.length) out.append(el('div', { class: 'mopt' }, serverKey ? 'Pakai daftar bawaan.' : '0 model via API.'));
+    ids.forEach(id => out.append(modelOption(id)));
+    if (!state.models[p]) state.models[p] = known[0] || loaded[0] || '';
+    updateModelTrigger();
+    toast(ids.length ? 'Model dimuat' : 'Belum ada model', 'ok');
+  } catch (e) {
+    out.innerHTML = '';
+    out.append(el('div', { class: 'mopt' }, 'Gagal muat model: ' + e.message));
+  }
 };
 
-/* ---------- params ---------- */
+/* Params */
 $('#temperature').oninput = () => { state.temperature = +$('#temperature').value; $('#tempVal').textContent = state.temperature.toFixed(2); autoSave(); };
-$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value; autoSave(); };
-
+$('#maxTokens').oninput = () => { state.maxTokens = +$('#maxTokens').value || 8192; autoSave(); };
 function applyParams() {
   $('#temperature').value = state.temperature;
-  $('#tempVal').textContent = state.temperature.toFixed(2);
+  $('#tempVal').textContent = Number(state.temperature).toFixed(2);
   $('#maxTokens').value = state.maxTokens;
 }
 
-/* ---------- system prompt ---------- */
+/* Prompt */
 async function loadDefaultPrompt() {
-  try { const r = await fetch('/api/prompt'); state.systemPrompt = (await r.json()).prompt; $('#systemPrompt').value = state.systemPrompt; updatePromptMeta(); }
-  catch { /* leave empty -> worker fallback */ }
+  try {
+    const r = await fetch('/api/prompt');
+    const data = await r.json();
+    state.systemPrompt = data.prompt || '';
+    $('#systemPrompt').value = state.systemPrompt;
+    updatePromptMeta();
+  } catch {}
 }
-function updatePromptMeta() { $('#promptChars').textContent = $('#systemPrompt').value.length.toLocaleString() + ' karakter'; }
-$('#systemPrompt').oninput = () => { state.systemPrompt = $('#systemPrompt').value; updatePromptMeta(); autoSave(); };
+function updatePromptMeta() {
+  $('#promptChars').textContent = ($('#systemPrompt').value.length || 0).toLocaleString('en-US') + ' karakter';
+}
+$('#systemPrompt').addEventListener('input', () => {
+  state.systemPrompt = $('#systemPrompt').value;
+  updatePromptMeta();
+  autoSave();
+});
 $('#btnTogglePrompt').onclick = () => {
   const open = $('#systemPrompt').classList.toggle('hidden');
   $('#btnTogglePrompt').textContent = open ? 'Perinci' : 'Tutup';
   $('#promptSummary').classList.toggle('hidden', !open);
 };
-$('#btnReloadPrompt').onclick = loadDefaultPrompt;
-$('#btnResetPrompt').onclick = () => { loadDefaultPrompt(); toast('System prompt di-reset ke bawaan', 'ok'); };
+$('#btnPromptDefault').onclick = loadDefaultPrompt;
+$('#btnPromptReset').onclick = () => { loadDefaultPrompt(); toast('System prompt di-reset', 'ok'); };
 
-/* ---------- run ---------- */
+/* Run */
 async function runEditor() {
   const p = state.provider;
-  const model = state.models[state.provider] || '';
-  const keys = currentKeyValues(p);
+  const model = state.models[p] || '';
+  const keys = currentKeys(p);
   const text = $('#txtPaste').value;
-  if (!model) return toast('Pilih model', 'err');
+  if (!model) return toast('Pilih model dulu.', 'err');
   const serverKey = PROVIDERS[p].serverKey;
-  if (!serverKey && keys.length === 0) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].keyLabel, 'err');
-  if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom', 'err');
-  if (!text.trim()) return toast('File terjemahan kosong', 'err');
+  if (!serverKey && !keys.length) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].label + ' key.', 'err');
+  if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom.', 'err');
+  if (!text.trim()) return toast('Sumber kosong.', 'err');
 
   const btn = $('#btnRun');
   if (btn.disabled) return;
@@ -495,24 +434,27 @@ async function runEditor() {
   setRunLoading(true);
   const t0 = performance.now();
   const tick = setInterval(() => {
-    $('#runStatusTxt').textContent = 'Menyunting… ' + Math.max(1, Math.round((performance.now() - t0) / 1000)) + ' dtk';
+    $('#runStatusText').textContent = 'Menyunting… ' + Math.max(1, Math.round((performance.now() - t0) / 1000)) + ' dtk';
   }, 400);
   try {
     const body = {
-      provider: p, model, keys,
+      provider: p,
+      model,
+      keys,
       text,
       systemPrompt: $('#systemPrompt').value,
-      temperature: state.temperature, maxOutputTokens: state.maxTokens,
-      strategy: 'round-robin',
+      temperature: state.temperature,
+      maxOutputTokens: state.maxTokens,
+      strategy: 'round-robin'
     };
     if (p === 'custom') body.custom = { baseUrl: state.custom.baseUrl, format: state.custom.format };
     const r = await apiCall('/api/edit', body);
     state.lastResult = r.raw;
     state.lastRun = { provider: p, model, ms: Math.round(performance.now() - t0), usage: r.usage, keyUsed: r.keyUsed, keyCount: r.keyCount };
-    const c = renderResults(r.raw, state.lastRun);
-    setRunStatus('ok', 'Selesai (' + state.lastRun.ms + ' ms) · ' + c.chg + ' perubahan · ' + c.rev + ' perlu dicek');
+    const c = renderResults(r.raw);
+    setRunStatus('ok', `Selesai (${state.lastRun.ms} ms) · ${c.chg} perubahan · ${c.rev} perlu dicek`);
   } catch (e) {
-    setRunStatus('error', 'Gagal: ' + (e.message || e));
+    setRunStatus('err', 'Gagal: ' + (e.message || e));
   } finally {
     clearInterval(tick);
     setRunLoading(false);
@@ -521,63 +463,55 @@ async function runEditor() {
   }
 }
 function setRunLoading(on) {
-  $('#runBtnLabel').textContent = on ? 'Menyunting…' : 'Jalankan';
+  $('#runLabel').textContent = on ? 'Menyunting…' : 'Jalankan';
   $('#runProgress').classList.toggle('on', on);
-  $('#runSpinner').classList.toggle('hidden', !on);
-  if (on) {
-    $('#runStatus').classList.remove('hidden', 'ok', 'error');
-    $('#runStatusTxt').textContent = 'Menyunting…';
-  }
+  $('#spinner').classList.toggle('hidden', !on);
+  const s = $('#runStatus');
+  s.classList.remove('hidden', 'ok', 'err');
+  if (on) $('#runStatusText').textContent = 'Menyunting…';
 }
-function setRunStatus(kind, txt) {
+function setRunStatus(kind, text) {
   const s = $('#runStatus');
   s.classList.remove('hidden');
   s.classList.toggle('ok', kind === 'ok');
-  s.classList.toggle('error', kind === 'error');
-  $('#runStatusTxt').textContent = txt;
+  s.classList.toggle('err', kind === 'err');
+  $('#runStatusText').textContent = text;
 }
 $('#btnRun').onclick = runEditor;
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runEditor(); }
 });
 
-/* ---------- result parsing ---------- */
+/* Results */
 function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 function highlightResult(text) {
-  const show = $('#diffMode').checked;
   const src = $('#txtPaste').value.split('\n');
-  const lines = text.split('\n');
-  let html = '';
-  lines.forEach((ln, i) => {
-    const changed = show && (i >= src.length || src[i] !== ln);
-    html += '<span class="ln' + (changed ? ' changed' : '') + '">' + (escapeHtml(ln) || ' ') + '</span>';
-  });
-  return html;
+  return text.split('\n').map((ln, i) => {
+    const changed = i >= src.length || src[i] !== ln;
+    return `<span class="line${changed ? ' changed' : ''}">${escapeHtml(ln) || '&nbsp;'}</span>`;
+  }).join('\n');
 }
 function splitSections(raw) {
   const s = String(raw || '').replace(/\r\n/g, '\n');
+  const i1 = s.search(/BAGIAN\s*1/i);
   const i2 = s.search(/BAGIAN\s*2/i);
   const i3 = s.search(/BAGIAN\s*3/i);
-  const i1 = s.search(/BAGIAN\s*1/i);
-  const startHasil = i1 >= 0 ? i1 : 0;
-  const hasilSec = s.slice(startHasil, i2 >= 0 ? i2 : s.length);
+  const hasilSec = s.slice(i1 >= 0 ? i1 : 0, i2 >= 0 ? i2 : s.length);
   const perubSec = i2 >= 0 ? s.slice(i2, i3 >= 0 ? i3 : s.length) : '';
   const dicekSec = i3 >= 0 ? s.slice(i3) : '';
   let hasilText = '';
   const fence = hasilSec.match(/```[^\n]*\n?([\s\S]*?)```/);
   if (fence) hasilText = fence[1].replace(/\s+$/, '');
   else {
-    hasilText = hasilSec.replace(/^.*?BAGIAN\s*1[^\n]*\n/i, '');
-    hasilText = hasilText.replace(/^\s*\n/, '');
+    hasilText = hasilSec.replace(/^.*?BAGIAN\s*1[^\n]*\n/i, '').replace(/^\s*\n/, '');
   }
   return { hasilText, perubSec, dicekSec };
 }
-
 function parseDiffEntries(sec) {
   const s = String(sec || '').replace(/\r\n/g, '\n').trim();
   if (!s) return [];
   const cleaned = s.replace(/^BAGIAN\s*\d[^\n]*\n*/i, '').trim();
-  if (!cleaned || /^tidak ada\./i.test(cleaned) || /^tidak ada perubahan\./i.test(cleaned)) return [];
+  if (!cleaned || /^tidak ada(\s|\.|$)/i.test(cleaned)) return [];
   const blocks = cleaned.split(/\n+(?=\[[^\]\n]+\]\s*(?:\n|$))/).map(b => b.trim()).filter(Boolean);
   return blocks.map(b => {
     const e = {};
@@ -587,91 +521,120 @@ function parseDiffEntries(sec) {
     let cur = null;
     body.split('\n').forEach(line => {
       const lm = line.match(/^(Sebelum|Sesudah|Alasan|Teks|Masalah|Saran)\s*:\s*(.*)$/i);
-      if (lm) { cur = lm[1].toLowerCase(); e[cur] = lm[2].trim(); }
-      else if (cur) { const t = line.trim(); if (t) e[cur] += '\n' + t; }
+      if (lm) {
+        cur = lm[1].toLowerCase();
+        e[cur] = lm[2].trim();
+      } else if (cur) {
+        const t = line.trim();
+        if (t) e[cur] += '\n' + t;
+      }
     });
-    for (const k of ['sebelum','sesudah','alasan','teks','masalah','saran']) if (e[k] != null) e[k] = e[k].trim();
+    for (const k of ['sebelum', 'sesudah', 'alasan', 'teks', 'masalah', 'saran']) if (e[k] != null) e[k] = e[k].trim();
     return e;
   });
 }
-
 function renderDiffList(container, entries, kind) {
   container.innerHTML = '';
   if (!entries.length) {
-    container.append(el('div', { class: 'empty-note' }, kind === 'perubahan' ? 'Tidak ada perubahan.' : 'Tidak ada.'));
+    container.append(el('p', { class: 'empty' }, kind === 'perubahan' ? 'Tidak ada perubahan.' : 'Tidak ada.'));
     return;
   }
   entries.forEach(e => {
-    const d = el('div', { class: 'diff' });
-    if (e.loc) d.append(el('div', { class: 'loc' }, '[' + e.loc + ']'));
+    const item = el('div', { class: 'diff-item' });
+    if (e.loc) item.append(el('div', { class: 'diff-loc' }, '[' + e.loc + ']'));
     if (kind === 'perubahan') {
-      if (e.sebelum) d.append(el('div', { class: 'lbl' }, 'Sebelum'), el('div', { class: 'tx before' }, e.sebelum));
-      if (e.sesudah) d.append(el('div', { class: 'lbl' }, 'Sesudah'), el('div', { class: 'tx after' }, e.sesudah));
-      if (e.alasan) d.append(el('div', { class: 'why' }, e.alasan));
+      if (e.sebelum) item.append(el('span', { class: 'diff-label' }, 'Sebelum'), el('span', { class: 'diff-text before' }, e.sebelum));
+      if (e.sesudah) item.append(el('span', { class: 'diff-label' }, 'Sesudah'), el('span', { class: 'diff-text after' }, e.sesudah));
+      if (e.alasan) item.append(el('div', { class: 'diff-why' }, e.alasan));
     } else {
-      if (e.teks) d.append(el('div', { class: 'lbl' }, 'Teks'), el('div', { class: 'tx' }, e.teks));
-      if (e.masalah) d.append(el('div', { class: 'why' }, 'Masalah: ' + e.masalah));
-      if (e.saran) d.append(el('div', { class: 'why' }, 'Saran: ' + e.saran));
+      if (e.teks) item.append(el('span', { class: 'diff-label' }, 'Teks'), el('span', { class: 'diff-text' }, e.teks));
+      if (e.masalah) item.append(el('div', { class: 'diff-why' }, 'Masalah: ' + e.masalah));
+      if (e.saran) item.append(el('div', { class: 'diff-why' }, 'Saran: ' + e.saran));
     }
-    container.append(d);
+    container.append(item);
   });
 }
-
-function renderResults(raw, run) {
+function renderResults(raw) {
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
-  const pre = $('#resultHasil');
-  pre.innerHTML = '<code>' + highlightResult(hasilText) + '</code>';
   window._hasilText = hasilText;
+  const pre = $('#resultHasil');
+  pre.innerHTML = '<code>' + (hasilText ? highlightResult(hasilText) : '<span class="placeholder">Hasil kosong.</span>') + '</code>';
   const chg = parseDiffEntries(perubSec);
   const rev = parseDiffEntries(dicekSec);
-  const hasilLines = hasilText ? hasilText.split('\n').filter(x => x.trim()).length : 0;
-  const hasilBadge = $('#hasilBadge');
-  if (hasilBadge) hasilBadge.textContent = String(hasilLines);
-  const chgBadge = $('#chgBadge');
-  if (chgBadge) chgBadge.textContent = String(chg.length);
-  const revBadge = $('#revBadge');
-  if (revBadge) revBadge.textContent = String(rev.length);
+  $('#badgeHasil').textContent = String(hasilText ? hasilText.split('\n').filter(Boolean).length : 0);
+  $('#badgeChg').textContent = String(chg.length);
+  $('#badgeRev').textContent = String(rev.length);
   renderDiffList($('#resultChanges'), chg, 'perubahan');
   renderDiffList($('#resultReview'), rev, 'perlu');
-  if (window.innerWidth < 1080 && $('#resultsCard')) {
-    setTimeout(() => $('#resultsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  }
   return { chg: chg.length, rev: rev.length };
 }
 
-/* ---------- copy / download ---------- */
-$('#btnCopyResult').onclick = async () => {
+/* Copy/download */
+$('#btnCopy').onclick = async () => {
   const txt = window._hasilText || state.lastResult;
   if (!txt) return toast('Belum ada hasil', 'err');
-  try { await navigator.clipboard.writeText(txt); toast('Hasil disalin', 'ok'); }
-  catch { window.prompt('Salin manual:', txt); }
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast('Hasil disalin', 'ok');
+  } catch {
+    window.prompt('Salin manual:', txt);
+  }
 };
-function download(name, text) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-}
-$('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
-$('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
+$('#btnDownload').onclick = () => {
+  const txt = window._hasilText || state.lastResult;
+  if (!txt) return toast('Belum ada hasil', 'err');
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'hasil-terjemahan.txt';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
 
-/* ---------- init ---------- */
+/* API */
+async function apiCall(path, body, method = 'POST') {
+  const headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  let res;
+  try {
+    res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  } catch (e) {
+    throw new Error('Tidak bisa menjangkau Worker. (' + e.message + ')');
+  }
+  let data;
+  try { data = await res.json(); } catch { data = { ok: false, code: 'BAD_RESPONSE', message: 'Respon bukan JSON' }; }
+  if (!res.ok) {
+    const e = new Error(data.message || ('HTTP ' + res.status));
+    e.code = data.code;
+    e.status = res.status;
+    throw e;
+  }
+  return data;
+}
+
+/* Init */
 (async function init() {
-  // bersihkan sisa vault lama (versi enkripsi AES-GCM sudah dihapus)
   try {
     localStorage.removeItem('tl.vault.data');
     localStorage.removeItem('tl.vault.meta');
     sessionStorage.removeItem('tl.session');
-  } catch { /* ignore */ }
+  } catch {}
   loadSettings();
   loadKeys();
   renderProviderTiles();
   syncProviderUI();
   renderKeyCard();
-  renderModelSelect();
+  rebuildModelPopup();
   applyParams();
   updateSourceStats();
-  switchView('sunting');
-  if (state.systemPrompt) { $('#systemPrompt').value = state.systemPrompt; updatePromptMeta(); }
-  else loadDefaultPrompt();
+  if (state.systemPrompt) {
+    $('#systemPrompt').value = state.systemPrompt;
+    updatePromptMeta();
+  } else {
+    loadDefaultPrompt();
+  }
+  closeSettings();
 })();
 })();

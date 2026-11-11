@@ -3,252 +3,216 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TL Editor — Lentera Studio</title>
-  <meta name="description" content="Lentera Studio: workbench penyuntingan hasil terjemahan komik / light novel bahasa Indonesia." />
-  <meta name="theme-color" content="#0e0f13" />
+  <title>TL Editor</title>
+  <meta name="description" content="TL Editor: ruang sunting hasil terjemahan komik / light novel. Diff selalu aktif, nomor baris selalu tampil, dan pengaturan dipisah sebagai panel sekunder." />
+  <meta name="theme-color" content="#0d0e11" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ffb03a'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' fill='%230e0f13' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=10" />
-  <script src="./theme.js?v=10"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0e11'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='11' fill='%23ffb03a' text-anchor='middle' font-weight='bold'%3ETL%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css?v=11" />
+  <script src="./theme.js?v=11"></script>
 </head>
 <body>
+  <div class="lamp" aria-hidden="true"></div>
+
   <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">TL</span>
-      <span class="brand-text">
+    <div class="topbar-left">
+      <span class="mark" aria-hidden="true">TL</span>
+      <div class="wordmark">
         <strong>TL Editor</strong>
-        <small>Lentera Studio</small>
-      </span>
+        <small>editor terjemahan</small>
+      </div>
     </div>
 
-    <div class="topbar-context">
-      <span class="eyebrow">Workspace</span>
-      <strong>Sunting</strong>
+    <div class="topbar-center" aria-hidden="true">
+      <span>Sumber</span>
+      <span class="tick">→</span>
+      <span class="accent">Hasil</span>
     </div>
 
-    <div class="topbar-actions">
-      <button class="icon-btn" id="btnOpenSettings" type="button" title="Buka Pengaturan" aria-label="Buka Pengaturan">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="3.2"></circle>
-          <path d="M19 12a7 7 0 0 0-.3-1.8l2-1.5-2-3.4-2.2 1a7 7 0 0 0-3-1.7L13 2h-4l-.5 2.6a7 7 0 0 0-3 1.7l-2.2-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .6.1 1.2.3 1.8l-2 1.5 2 3.4 2.2-1a7 7 0 0 0 3 1.7L13 22h4l.5-2.6a7 7 0 0 0 3-1.7l2.2 1 2-3.4-2-1.5c.2-.6.3-1.2.3-1.8Z"></path>
-        </svg>
-      </button>
-      <button class="icon-btn" id="themeToggle" type="button" title="Siklus tema: sistem → terang → gelap" aria-label="Ganti tema">
+    <div class="topbar-right">
+      <button class="text-link" id="btnOpenSettings" type="button" data-open-settings>Pengaturan</button>
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="Ganti tema" title="Siklus tema: sistem → terang → gelap">
         <span id="themeIcon" class="theme-icon" aria-hidden="true"></span>
       </button>
     </div>
   </header>
 
-  <main class="main">
-    <!-- ============ 01 SUNTING ============ -->
-    <section id="view-sunting" class="view active" aria-label="Sunting">
-      <div class="studio-grid">
-        <section class="panel source-panel" aria-label="Sumber terjemahan">
-          <div class="panel-head">
-            <div>
-              <h1>Sumber terjemahan</h1>
-              <p class="panel-sub">File .txt hasil terjemahan, siap disunting.</p>
-            </div>
-            <span class="pill" id="srcBadge">0 baris</span>
-          </div>
-
-          <div class="source-tools">
-            <button class="btn-primary compact" id="btnChooseFile" type="button">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 1v9m0 0L5 7m3 3l3-3M2 13h12"/></svg>
-              <span>Pilih .txt</span>
-            </button>
-            <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
-            <button class="ghost-btn compact" id="btnSample" type="button">Contoh</button>
-            <button class="ghost-btn compact" id="btnNormalize" type="button">Rapi</button>
-            <button class="ghost-btn compact danger" id="btnClearSource" type="button">Bersihkan</button>
-          </div>
-
-          <div class="source-stats">
-            <span><b id="statPages">0</b> halaman</span>
-            <span><b id="statChars">0</b> karakter</span>
-            <span><b id="statTokens">~0</b> token</span>
-          </div>
-
-          <div class="editor" id="srcArea">
-            <div class="linegutter" id="lineGutter" aria-hidden="true"></div>
-            <textarea id="txtPaste" spellcheck="false" aria-label="Isi file terjemahan" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
-          </div>
-
-          <div class="action-bar" aria-label="Parameter dan jalankan">
-            <div class="action-group">
-              <span class="action-label">Provider</span>
-              <button class="action-select" id="btnToSettings" type="button">
-                <b id="runProviderLabel">Default</b>
-                <span>ubah</span>
-              </button>
-            </div>
-
-            <div class="action-group model-group">
-              <span class="action-label">Model</span>
-              <div class="model-control">
-                <button class="model-trigger" id="modelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">Model B</button>
-                <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
-                <button class="ghost-btn tiny" id="btnLoadModels" type="button">Muat</button>
-              </div>
-            </div>
-
-            <div class="action-group">
-              <span class="action-label">Temp</span>
-              <div class="temp-control">
-                <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" aria-label="Temperature" />
-                <output id="tempVal" for="temperature">0.50</output>
-              </div>
-            </div>
-
-            <div class="action-group">
-              <span class="action-label">Tokens</span>
-              <input id="maxTokens" type="number" min="256" max="32768" step="256" value="8192" aria-label="Maks token" />
-            </div>
-
-            <button class="btn-primary run" id="btnRun" type="button">
-              <span class="run-progress" id="runProgress" aria-hidden="true"><i></i></span>
-              <svg class="run-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
-              <span id="runBtnLabel">Jalankan</span>
-            </button>
-          </div>
-
-          <div class="model-list" id="modelList" aria-live="polite"></div>
-        </section>
-
-        <section class="panel results-panel" id="resultsCard" aria-label="Hasil penyuntingan">
-          <div class="panel-head results-top">
-            <div>
-              <h1>Hasil</h1>
-              <p class="panel-sub">Tiga bagian di bawah sudah langsung terbuka. Tidak perlu klik lagi.</p>
-            </div>
-            <label class="check">
-              <input type="checkbox" id="diffMode" checked />
-              <span>diff</span>
-            </label>
-            <button class="ghost-btn compact" id="btnCopyResult" type="button">Salin</button>
-            <button class="ghost-btn compact" id="btnDownloadResult" type="button">Unduh .txt</button>
-          </div>
-
-          <div class="result-stack">
-            <section class="result-section">
-              <div class="result-head">
-                <h2>Hasil akhir</h2>
-                <span class="pill" id="hasilBadge">0</span>
-              </div>
-              <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik “Jalankan” dulu. Hasil akhir akan muncul di sini dan bisa disalin langsung.</code></pre>
-            </section>
-
-            <section class="result-section">
-              <div class="result-head">
-                <h2>Perubahan</h2>
-                <span class="pill" id="chgBadge">0</span>
-              </div>
-              <div class="result-list" id="resultChanges">
-                <div class="empty-note">Belum ada hasil.</div>
-              </div>
-            </section>
-
-            <section class="result-section warn">
-              <div class="result-head">
-                <h2>Perlu dicek</h2>
-                <span class="pill warn" id="revBadge">0</span>
-              </div>
-              <div class="result-list" id="resultReview">
-                <div class="empty-note">Belum ada hasil.</div>
-              </div>
-            </section>
-          </div>
-        </section>
+  <main class="desk">
+    <section class="pane source-pane" aria-label="Sumber terjemahan">
+      <div class="pane-title">
+        <p class="kicker">01 · Sumber</p>
+        <h1>Manuskrip terjemahan</h1>
+        <p class="meta" id="srcMeta">0 baris · 0 halaman · 0 karakter</p>
       </div>
 
-      <div class="run-status hidden" id="runStatus" role="status">
-        <span class="spinner hidden" id="runSpinner" aria-hidden="true"></span>
-        <span id="runStatusTxt">Siap.</span>
+      <div class="source-controls">
+        <button class="btn-primary" id="btnChooseFile" type="button">Pilih file .txt</button>
+        <input id="fileInput" type="file" accept=".txt,text/plain" hidden />
+        <button class="btn-quiet" id="btnClearSource" type="button">Bersihkan</button>
+      </div>
+
+      <div class="editor" id="editorArea">
+        <div class="linegutter" id="lineGutter" aria-hidden="true"></div>
+        <textarea id="txtPaste" spellcheck="false" placeholder="Tempel file hasil terjemahan (.txt) di sini…"></textarea>
       </div>
     </section>
 
-    <!-- ============ 02 PENGATURAN (drawer, bukan menu utama) ============ -->
-    <section id="view-pengaturan" class="view settings-drawer" aria-label="Pengaturan">
-      <div class="drawer-backdrop" data-close-settings></div>
-      <div class="drawer-sheet">
-      <div class="settings-head">
-        <div>
-          <h1>Pengaturan</h1>
-          <p class="panel-sub">Provider, kunci, model, prompt, dan tampilan. Semua tersimpan lokal di browser.</p>
+    <section class="pane result-pane" aria-label="Hasil penyuntingan">
+      <div class="pane-title">
+        <p class="kicker">02 · Hasil</p>
+        <h1>Proofreading</h1>
+        <p class="meta">Diff selalu aktif. Nomor baris selalu tampil.</p>
+      </div>
+
+      <div class="result-actions">
+        <span class="meta">Salin atau unduh setelah “Jalankan”.</span>
+        <button class="btn-quiet" id="btnCopy" type="button">Salin</button>
+        <button class="btn-quiet" id="btnDownload" type="button">Unduh .txt</button>
+      </div>
+
+      <section class="result-block">
+        <header class="result-head">
+          <h2>Hasil akhir</h2>
+          <span class="count" id="badgeHasil">0</span>
+        </header>
+        <pre class="output" id="resultHasil"><code class="placeholder">Belum ada hasil. Isi sumber lalu klik Jalankan.</code></pre>
+      </section>
+
+      <section class="result-block">
+        <header class="result-head">
+          <h2>Perubahan</h2>
+          <span class="count" id="badgeChg">0</span>
+        </header>
+        <div class="diff-list" id="resultChanges">
+          <p class="empty">Belum ada hasil.</p>
         </div>
-        <button class="ghost-btn" id="btnBackSunting" type="button">← Sunting</button>
-      </div>
+      </section>
 
-      <div class="settings-grid">
-        <section class="settings-card span-2">
-          <div class="card-head">
-            <h2>Provider</h2>
-            <p>Pilih sumber model yang dipakai tombol Jalankan.</p>
-          </div>
-          <div class="provider-tiles" id="providerTiles"></div>
-        </section>
-
-        <section class="settings-card span-2">
-          <div class="card-head">
-            <h2>Kunci & model</h2>
-            <span class="pill" id="keyCount">0 kunci</span>
-          </div>
-          <div id="keyCardBody"></div>
-          <div class="ping-results hidden" id="pingResults"></div>
-          <p class="note" id="keyNote">
-            Kunci BYOK disimpan plaintext di browser dan hanya dikirim lewat HTTPS ke Worker-mu.
-            Provider <b>Default</b> memakai kunci di server, tanpa input apa pun.
-          </p>
-        </section>
-
-        <section class="settings-card">
-          <div class="card-head">
-            <h2>System Prompt</h2>
-            <button class="ghost-btn tiny" id="btnTogglePrompt" type="button">Perinci</button>
-          </div>
-          <p class="prompt-summary" id="promptSummary">
-            Menyunting hasil terjemahan, bukan menerjemahkan ulang: makna → typo → naturalitas → efisiensi.
-            Struktur, istilah Inggris, dan kata ganti pengguna dipertahankan.
-          </p>
-          <textarea id="systemPrompt" class="prompt-editor hidden" spellcheck="false" rows="10" aria-label="System prompt"></textarea>
-          <div class="prompt-tools">
-            <button class="ghost-btn tiny" id="btnReloadPrompt" type="button">Muat bawaan</button>
-            <button class="ghost-btn tiny" id="btnResetPrompt" type="button">Reset</button>
-            <span class="muted" id="promptChars"></span>
-          </div>
-        </section>
-
-        <section class="settings-card">
-          <div class="card-head">
-            <h2>Tampilan</h2>
-            <p>“Sistem” mengikuti preferensi perangkat.</p>
-          </div>
-          <div class="theme-seg" id="themeSeg">
-            <button class="seg-tab active" data-tseg="system" type="button">Sistem</button>
-            <button class="seg-tab" data-tseg="light" type="button">Terang</button>
-            <button class="seg-tab" data-tseg="dark" type="button">Gelap</button>
-          </div>
-        </section>
-
-        <section class="settings-card span-2">
-          <div class="card-head">
-            <h2>Panduan singkat</h2>
-          </div>
-          <ol class="guide">
-            <li><b>Contoh</b>: memuat contoh naskah ke editor.</li>
-            <li><b>Rapi</b>: menormalisasi spasi, tab, dan baris kosong.</li>
-            <li><b>Bersihkan</b>: menghapus isi editor.</li>
-            <li><b>Jalankan</b>: hasil, perubahan, dan yang perlu dicek langsung terbuka di panel Hasil.</li>
-          </ol>
-        </section>
-      </div>
-      </div>
+      <section class="result-block warn">
+        <header class="result-head">
+          <h2>Perlu dicek</h2>
+          <span class="count warn" id="badgeRev">0</span>
+        </header>
+        <div class="diff-list" id="resultReview">
+          <p class="empty">Belum ada hasil.</p>
+        </div>
+      </section>
     </section>
   </main>
 
-  <div id="toast" class="toast hidden" role="status"></div>
-  <script src="./app.js?v=10"></script>
+  <footer class="console">
+    <div class="console-grid">
+      <div class="param">
+        <span class="param-label">Provider</span>
+        <button class="param-value" type="button" data-open-settings>
+          <b id="providerName">Default</b>
+          <span>ubah</span>
+        </button>
+      </div>
+
+      <div class="param model-param">
+        <span class="param-label">Model</span>
+        <div class="model-control">
+          <button class="model-trigger" id="modelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">Model B</button>
+          <div class="model-popup hidden" id="modelPopup" role="listbox"></div>
+          <button class="btn-quiet small" id="btnLoadModels" type="button">Muat</button>
+        </div>
+      </div>
+
+      <div class="param">
+        <span class="param-label">Temp</span>
+        <div class="temp-row">
+          <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.5" aria-label="Temperature" />
+          <output id="tempVal" for="temperature">0.50</output>
+        </div>
+      </div>
+
+      <div class="param">
+        <span class="param-label">Tokens</span>
+        <input id="maxTokens" type="number" min="256" max="32768" step="256" value="8192" aria-label="Maks token" />
+      </div>
+
+      <button class="btn-run" id="btnRun" type="button">
+        <span class="run-progress" id="runProgress" aria-hidden="true"></span>
+        <span class="run-mark" aria-hidden="true">▶</span>
+        <span id="runLabel">Jalankan</span>
+      </button>
+    </div>
+
+    <div class="run-status" id="runStatus" role="status">
+      <span class="spinner hidden" id="spinner" aria-hidden="true"></span>
+      <span id="runStatusText">Siap.</span>
+    </div>
+  </footer>
+
+  <aside class="settings hidden" id="settingsOverlay" aria-label="Pengaturan">
+    <div class="settings-backdrop" data-close-settings></div>
+    <div class="settings-sheet">
+      <header class="settings-top">
+        <div>
+          <p class="kicker">Panel</p>
+          <h1>Pengaturan</h1>
+        </div>
+        <button class="text-link" id="btnCloseSettings" type="button" data-close-settings>Tutup</button>
+      </header>
+
+      <section class="settings-block">
+        <header class="settings-head">
+          <h2>Provider</h2>
+        </header>
+        <div class="provider-grid" id="providerList"></div>
+      </section>
+
+      <section class="settings-block">
+        <header class="settings-head">
+          <h2>Kunci & model</h2>
+          <span class="count" id="keyCount">0 kunci</span>
+        </header>
+        <div id="keyCard"></div>
+        <div class="custom-panel hidden" id="customPanel">
+          <label class="field-label" for="customBaseUrl">Base URL</label>
+          <input class="field" id="customBaseUrl" type="url" placeholder="https://host.example.com/v1" autocomplete="off" spellcheck="false" />
+          <div class="segmented" id="customFormat" role="tablist" aria-label="Format custom">
+            <button class="seg-btn active" data-format="openai" type="button">OpenAI</button>
+            <button class="seg-btn" data-format="gemini" type="button">Gemini</button>
+          </div>
+          <label class="field-label" for="customModel">Model</label>
+          <input class="field mono" id="customModel" placeholder="nama-model" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="ping hidden" id="pingOut"></div>
+        <p class="note">Kunci BYOK disimpan plaintext di browser ini dan hanya dikirim HTTPS ke Worker-mu. Provider <b>Default</b> memakai kunci di server.</p>
+      </section>
+
+      <section class="settings-block">
+        <header class="settings-head">
+          <h2>System prompt</h2>
+          <button class="btn-quiet small" id="btnTogglePrompt" type="button">Perinci</button>
+        </header>
+        <p class="note" id="promptSummary">Editor aktif: makna tetap, bunyi kalimat ditingkatkan. Istilah Inggris dipertahankan. Output tiga bagian.</p>
+        <textarea class="prompt hidden" id="systemPrompt" rows="10" spellcheck="false" aria-label="System prompt"></textarea>
+        <div class="prompt-tools">
+          <button class="btn-quiet small" id="btnPromptDefault" type="button">Muat bawaan</button>
+          <button class="btn-quiet small" id="btnPromptReset" type="button">Reset</button>
+          <span class="muted" id="promptChars"></span>
+        </div>
+      </section>
+
+      <section class="settings-block">
+        <header class="settings-head">
+          <h2>Tampilan</h2>
+        </header>
+        <div class="segmented theme-seg" id="themeOptions">
+          <button class="seg-btn active" data-theme="system" type="button">Sistem</button>
+          <button class="seg-btn" data-theme="light" type="button">Terang</button>
+          <button class="seg-btn" data-theme="dark" type="button">Gelap</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+  <script src="./app.js?v=11"></script>
 </body>
 </html>
