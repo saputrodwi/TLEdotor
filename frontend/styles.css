@@ -221,6 +221,14 @@ code { font-family: var(--font-mono); }
 .run-progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--accent); opacity: .28; }
 .run-progress.on { width: 100%; animation: progress 1.2s ease-in-out infinite; }
 @keyframes progress { 50% { opacity: .68; } }
+.run-kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--muted);
+  padding: 0 4px;
+  white-space: nowrap;
+}
 
 /* Editor: always line numbers, always diff later */
 .editor {
@@ -574,6 +582,7 @@ code { font-family: var(--font-mono); }
   .console-grid { grid-template-columns: 1fr 1fr; }
   .console-grid .model-param { grid-column: 1 / -1; }
   .console-grid .btn-run { grid-column: 1 / -1; min-height: 46px; }
+  .run-kbd { display: none; }
   .provider-grid { grid-template-columns: 1fr; }
   .settings-sheet { width: 100%; border-left: 0; }
 }
