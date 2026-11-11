@@ -500,27 +500,19 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- result parsing ---------- */
-function parseEntries(sectionText) {
-  const lines = (sectionText || '').split('\n');
-  const entries = []; let cur = null;
-  const locRe = /^\s*\[([^\[\]]+)\]\s*$/;
-  const labelRe = /^(sebelum|sesudah|alasan|teks|masalah|saran)\s*:\s*(.*)$/i;
-  const singleLabels = new Set(['sebelum', 'sesudah', 'alasan', 'teks', 'masalah', 'saran']);
-  for (const raw of lines) {
-    const loc = raw.match(locRe);
-    if (loc && /p\s*\d+|baris/i.test(loc[1])) { if (cur) entries.push(cur); cur = { loc: loc[1].trim(), before: '', after: '', reason: '', teks: '', masalah: '', saran: '', _pend: null }; continue; }
-    if (!cur) continue;
-    const t = raw.trim();
-    const inl = t.match(labelRe);
-    if (inl) { const k = inl[1].toLowerCase(); cur[k === 'sebelum' ? 'before' : k === 'sesudah' ? 'after' : k === 'alasan' ? 'reason' : k === 'teks' ? 'teks' : k === 'masalah' ? 'masalah' : 'saran'] = inl[2]; cur._pend = null; continue; }
-    for (const L of singleLabels) { if (new RegExp('^' + L + '\\s*:', 'i').test(t)) { cur._pend = L === 'sebelum' ? 'before' : L === 'sesudah' ? 'after' : L === 'alasan' ? 'reason' : L; continue; } }
-    if (cur._pend && raw.length) cur[cur._pend] += (cur[cur._pend] ? '\n' : '') + raw;
-  }
-  if (cur) entries.push(cur);
-  for (const e of entries) for (const k of Object.keys(e)) { if (typeof e[k] === 'string') e[k] = e[k].replace(/^["']|["']$/g, '').trim(); }
-  return entries;
-}
 
+function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function highlightResult(text) {
+  const show = $('#diffMode').checked;
+  const src = $('#txtPaste').value.split('\n');
+  const lines = text.split('\n');
+  let html = '';
+  lines.forEach((ln, i) => {
+    const changed = show && (i >= src.length || src[i] !== ln);
+    html += '<span class="ln' + (changed ? ' changed' : '') + '">' + (escapeHtml(ln) || ' ') + '</span>';
+  });
+  return html;
+}
 function splitSections(raw) {
   const s = String(raw || '').replace(/\r\n/g, '\n');
   const i2 = s.search(/BAGIAN\s*2/i);
@@ -543,62 +535,10 @@ function splitSections(raw) {
 function renderResults(raw, run) {
   const resultsCard = $('#resultsCard');
   if (resultsCard) resultsCard.classList.remove('hidden');
-  const { hasilText, perubSec, dicekSec } = splitSections(raw);
-  const hasChanges = !!hasilText;
+  const { hasilText } = splitSections(raw);
   const pre = $('#resultHasil');
-  pre.innerHTML = '<code' + (hasChanges ? '' : ' class="placeholder"') + '>' + (hasChanges ? highlightResult(hasilText) : escapeHtml(raw || '(kosong)')) + '</code>';
-  $('#cntHasil').textContent = hasChanges ? hasilText.split('\n').length : 0;
-  $('#hasilNote').textContent = hasChanges ? '' : 'Tiga bagian tidak dikenali. Lihat tab Raw.';
-  const resActions = $('#resActions');
-  if (resActions) resActions.classList.remove('hidden');
-  let perub = parseEntries(perubSec).filter(e => e.loc);
-  const perubEmpty = /tidak ada perubahan/i.test(perubSec);
-  renderCards($('#resultPerubahan'), perub, perubEmpty, 'perubahan');
-  $('#cntPerubahan').textContent = perubEmpty ? 0 : perub.length;
-  let dicek = parseEntries(dicekSec).filter(e => e.loc);
-  const dicekEmpty = /tidak ada/i.test(dicekSec.trim()) && dicekSec.trim().length < 40;
-  renderCards($('#resultDicek'), dicek, dicekEmpty, 'dicek');
-  $('#cntDicek').textContent = dicekEmpty ? 0 : dicek.length;
-  $('#resultRaw').textContent = raw || '';
-  $('#cntRaw').textContent = raw ? raw.split('\n').length : '—';
-  const m = $('#runMeta'); m.innerHTML = '';
-  window._hasilText = hasilText; window._rawAll = raw;
-}
-function mkTag(t) { return el('span', { class: 'tag' }, t); }
-
-function renderCards(container, entries, isEmpty, kind) {
-  container.innerHTML = '';
-  if (isEmpty) { container.append(el('div', { class: 'empty' }, kind === 'dicek' ? 'Tidak ada bagian yang perlu dicek.' : 'Tidak ada perubahan.')); return; }
-  if (!entries.length) { container.append(el('div', { class: 'empty' }, 'Format bagian tidak dikenali — lihat tab Raw.')); return; }
-  entries.forEach(e => {
-    if (kind === 'perubahan') {
-      container.append(el('div', { class: 'ccard' },
-        el('div', { class: 'loc' }, '[' + e.loc + ']'),
-        e.before ? el('div', {}, el('div', { class: 'lbl' }, 'Sebelum'), el('div', { class: 'before' }, e.before)) : null,
-        e.after ? el('div', {}, el('div', { class: 'lbl' }, 'Sesudah'), el('div', { class: 'after' }, e.after)) : null,
-        e.reason ? el('div', { class: 'reason' }, 'Alasan: ' + e.reason) : null,
-      ));
-    } else {
-      container.append(el('div', { class: 'ccard warn' },
-        el('div', { class: 'loc' }, '[' + e.loc + ']'),
-        e.teks ? el('div', {}, el('div', { class: 'lbl' }, 'Teks'), el('div', { class: 'body-text' }, e.teks)) : null,
-        e.masalah ? el('div', {}, el('div', { class: 'lbl' }, 'Masalah'), el('div', { class: 'reason' }, e.masalah)) : null,
-        e.saran ? el('div', {}, el('div', { class: 'lbl' }, 'Saran'), el('div', { class: 'reason' }, e.saran)) : null,
-      ));
-    }
-  });
-}
-function escapeHtml(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
-function highlightResult(text) {
-  const show = $('#diffMode').checked;
-  const src = $('#txtPaste').value.split('\n');
-  const lines = text.split('\n');
-  let html = '';
-  lines.forEach((ln, i) => {
-    const changed = show && (i >= src.length || src[i] !== ln);
-    html += '<span class="ln' + (changed ? ' changed' : '') + '">' + (escapeHtml(ln) || ' ') + '</span>';
-  });
-  return html;
+  pre.innerHTML = '<code>' + highlightResult(hasilText) + '</code>';
+  window._hasilText = hasilText;
 }
 
 /* ---------- copy / download ---------- */
@@ -614,13 +554,6 @@ function download(name, text) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 $('#btnDownloadResult').onclick = () => { if (window._hasilText) download('hasil-terjemahan.txt', window._hasilText); else toast('Belum ada hasil', 'err'); };
-
-/* result sub-tabs */
-$$('.res-tab').forEach(b => b.onclick = () => showResTab(b.dataset.res));
-function showResTab(name) {
-  $$('.res-tab').forEach(x => x.classList.toggle('active', x.dataset.res === name));
-  $$('.res-pane').forEach(x => x.classList.toggle('hidden', x.dataset.res !== name));
-}
 $('#diffMode').onchange = () => { if (window._hasilText) renderResults(state.lastResult, state.lastRun); };
 
 /* ---------- security ---------- */

@@ -79,29 +79,15 @@
         </div>
       </div>
 
-      <!-- results (hidden until first run) -->
+      <!-- results: clean -->
       <div class="card results hidden" id="resultsCard">
-        <div class="res-tabs">
-          <button class="res-tab active" data-res="hasil">Hasil <em id="cntHasil">0</em></button>
-          <button class="res-tab" data-res="perubahan">Perubahan <em id="cntPerubahan">0</em></button>
-          <button class="res-tab warn" data-res="dicek">Perlu dicek <em id="cntDicek">0</em></button>
-          <button class="res-tab" data-res="raw">Raw <em id="cntRaw">—</em></button>
+        <div class="res-header">
+          <b>Hasil</b>
+          <label class="check"><input type="checkbox" id="diffMode" checked /><span>diff</span></label>
+          <button class="ghost-btn tiny" id="btnCopyResult">Salin</button>
+          <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
         </div>
-        <div class="res-body">
-          <div class="res-pane" data-res="hasil">
-            <div class="res-actions hidden" id="resActions">
-              <label class="check"><input type="checkbox" id="diffMode" /><span>diff</span></label>
-              <button class="ghost-btn tiny" id="btnCopyResult">Salin</button>
-              <button class="ghost-btn tiny" id="btnDownloadResult">Unduh .txt</button>
-              <span class="muted" id="hasilNote"></span>
-            </div>
-            <pre class="mono-output" id="resultHasil"><code class="placeholder">Tempel file atau klik “Pilih file .txt” di atas, lalu tekan Jalankan.</code></pre>
-          </div>
-          <div class="res-pane hidden" data-res="perubahan"><div id="resultPerubahan" class="cards"><div class="empty">—</div></div></div>
-          <div class="res-pane hidden" data-res="dicek"><div id="resultDicek" class="cards"><div class="empty">—</div></div></div>
-          <div class="res-pane hidden" data-res="raw"><pre class="mono-output"><code id="resultRaw" class="placeholder">—</code></pre></div>
-        </div>
-        <div class="run-meta hidden" id="runMeta"></div>
+        <pre class="mono-output" id="resultHasil"><code class="placeholder">Klik "Jalankan" dulu.</code></pre>
       </div>
     </section>
 
