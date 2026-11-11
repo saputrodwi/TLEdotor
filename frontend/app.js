@@ -127,13 +127,13 @@ const THEME_ICONS = {
 function applyTheme() {
   const resolved = state.theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : state.theme;
   document.documentElement.dataset.theme = resolved;
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', resolved === 'dark' ? '#0d0e11' : '#f4efe6');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', resolved === 'dark' ? '#191817' : '#FCF9F2');
   const icon = $('#themeIcon');
   if (icon) icon.innerHTML = THEME_ICONS[state.theme];
   $$('#themeOptions .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === state.theme));
   try { localStorage.setItem(LS_THEME, state.theme); } catch {}
 }
-try { state.theme = localStorage.getItem(LS_THEME) || 'system'; } catch {}
+try { state.theme = localStorage.getItem(LS_THEME) || 'light'; } catch {}
 applyTheme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.theme === 'system') applyTheme(); });
 $('#themeToggle').onclick = () => {
