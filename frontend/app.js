@@ -701,6 +701,13 @@ async function apiCall(path, body, method = 'POST') {
   let data;
   try { data = await res.json(); } catch { data = { ok: false, code: 'BAD_RESPONSE', message: 'Respon bukan JSON' }; }
   if (!res.ok) {
+    // Special handling for Agnes AI Error 1015 (Cloudflare rate limit on Worker egress)
+    if (data.code === 'PROVIDER_FAILED' && String(data.message || '').includes('1015')) {
+      const waitMs = Math.min(30000, (Math.random() * 5000) + 2000);
+      toast('Rate limit Agnes AI (Error 1015). Coba lagi dalam ' + Math.round(waitMs/1000) + ' detik...', 'warn');
+      await new Promise(r => setTimeout(r, waitMs));
+      return apiCall(path, body, method);
+    }
     const e = new Error(data.message || ('HTTP ' + res.status));
     e.code = data.code;
     e.status = res.status;
