@@ -37,13 +37,10 @@ const PROVIDERS = {
     keyHint: 'Mulai dengan AIza…'
   },
   default: {
-    label: 'Default', tag: 'Agnes AI', multiKey: true,
+    label: 'Default', tag: 'Kunci server', serverKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
     modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
-    keyHint: 'Kunci Agnes AI-mu sendiri. Kosongkan kalau mau pakai kunci server.',
-    // Allow user-provided keys; server key used as fallback when empty
-    allowUserKeys: true,
-    baseUrl: 'https://apihub.agnes-ai.com/v1'
+    keyHint: 'Kunci di server. Tanpa input.'
   },
   sumopod: {
     label: 'Sumopod', tag: 'ai.sumopod.com', multiKey: true,
@@ -256,11 +253,9 @@ function renderKeyCard() {
   box.innerHTML = '';
   const p = PROVIDERS[state.provider];
   const keys = currentKeys();
-  // Default provider with allowUserKeys: show input but also support empty (server key fallback)
-  const isDefaultWithUserKeys = p.serverKey && p.allowUserKeys;
-  $('#keyCount').textContent = (!keys.length && !isDefaultWithUserKeys) ? 'server key' : keys.length + ' kunci';
+  $('#keyCount').textContent = p.serverKey ? 'server key' : keys.length + ' kunci';
 
-  if (p.serverKey && !isDefaultWithUserKeys) {
+  if (p.serverKey) {
     box.append(el('p', { class: 'note' }, 'Provider Default memakai kunci di server. Tanpa input apa pun.'));
   } else {
     box.append(el('label', { class: 'field-label', for: 'keyInput' }, 'API key — ' + p.label + (p.multiKey ? ' · pisahkan dengan koma' : '')));
@@ -292,9 +287,7 @@ async function pingAll() {
   const p = state.provider;
   const keys = currentKeys(p);
   const serverKey = PROVIDERS[p].serverKey;
-  const allowUserKeys = PROVIDERS[p].allowUserKeys;
-  // For default with allowUserKeys: proceed if either user has keys OR it's ok to use server key
-  if (!allowUserKeys && !serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
+  if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
   const out = $('#pingOut');
   out.classList.remove('hidden');
   out.innerHTML = '';
@@ -431,9 +424,7 @@ async function runEditor() {
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih model dulu.', 'err');
   const serverKey = PROVIDERS[p].serverKey;
-  const allowUserKeys = PROVIDERS[p].allowUserKeys;
-  // For default with allowUserKeys: allow empty keys (will use server key fallback)
-  if (!serverKey && !allowUserKeys && !keys.length) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].label + ' key.', 'err');
+  if (!serverKey && !keys.length) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].label + ' key.', 'err');
   if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom.', 'err');
   if (!text.trim()) return toast('Sumber kosong.', 'err');
 
