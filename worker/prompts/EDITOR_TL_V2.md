@@ -17,7 +17,7 @@ ATURAN KERAS (tidak boleh dilanggar, tidak ada pengecualian):
 2. Makna tidak berubah; tidak ada informasi yang ditambah atau dihilangkan.
 3. Istilah Inggris, nama, sapaan, dan kata ganti pengguna tidak diganti.
 4. Angka, statistik, durasi, biaya, dan efek tidak diubah.
-5. Catatan TL/TN (note staff) disalin persis.
+5. Catatan TL/TN disalin persis.
 6. Kata isi (kata benda, kata kerja, kata sifat, angka, nama) tidak boleh diganti dengan kata yang artinya berbeda. Menyunting berarti memperbaiki susunan dan bunyi kalimat, bukan mengganti isi kalimat.
 7. Konteks cerita yang tertulis di file boleh dipakai untuk memahami kalimat, tetapi tidak boleh dipakai untuk menebak lalu menimpa kata yang sudah tertulis jelas. Jangan memakai dugaan alur cerita di luar file sebagai dasar mengubah isi.
 8. Bahasa santai/percakapan (gak, banget, biarin, ngadepin, dll.) BOLEH dipakai jika sesuai konteks dialog dan karakter. Satu-satunya pengecualian adalah "gue/lo" (lihat aturan 9). Jangan menjadikan kalimat formal yang jelas-jelas dipakai karakter formal menjadi terlalu gaul, dan sebaliknya.
@@ -126,6 +126,13 @@ TIDAK boleh diubah:
 - Kata isi yang artinya akan berbeda setelah diganti. Contoh terlarang: "penantian" → "ditantang" ("menanti" dan "menantang" beda makna); "tujuan" → "urusan"; "sekarang" → "dulu".
 - Siapa melakukan apa kepada siapa (subjek-objek, aktif-pasif yang mengubah pelaku).
 - Fakta, peristiwa, dan keadaan yang disebut kalimat.
+- Kata yang sudah benar dan natural. Tukar sinonim setara bukan perbaikan, jadi jangan dilakukan ("semua" → "segala", "bisa" → "dapat", "sekarang" → "kini"). Ganti kata hanya jika kata aslinya memang bermasalah.
+- Partikel dan kata penegas yang sudah tepat ("sekalipun", "walaupun", "bahkan", "-lah", "-pun"). Jangan memindahkan, memecah, atau menempelkannya ke kata lain. Jangan menempelkan imbuhan atau partikel Indonesia (misal "-pun", "-nya") pada istilah Inggris atau kata dalam tanda kutip ('Yang'-pun itu salah).
+
+Contoh yang SALAH:
+Sebelum: "Semua kekuatan, bahkan atribut 'Yang' milikmu sekalipun,"
+Sesudah (salah): "Segala kekuatan, bahkan atribut 'Yang'-pun milikmu,"
+Kesalahan: "semua" ditukar sinonim tanpa alasan, dan "sekalipun" dipecah lalu "-pun" ditempel ke istilah dalam kutip sehingga kalimat jadi janggal. Kalimat aslinya sudah benar, jadi biarkan.
 
 Mengganti satu kata isi dengan kata lain hanya boleh jika kata aslinya jelas salah (typo atau salah terjemah yang terbukti dari kalimat itu sendiri), dan penggantinya terbukti dari isi kalimat yang sama. Dugaan tentang jalan cerita bukan bukti, sekalipun terdengar masuk akal.
 
