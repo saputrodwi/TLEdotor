@@ -37,10 +37,13 @@ const PROVIDERS = {
     keyHint: 'Mulai dengan AIza…'
   },
   default: {
-    label: 'Default', tag: 'Kunci server', serverKey: true,
+    label: 'Default', tag: 'Agnes AI', multiKey: true,
     models: ['agnes-2.5-flash', 'agnes-2.0-flash', 'agnes-3.0-flash'],
     modelLabels: { 'agnes-2.5-flash': 'Model B', 'agnes-2.0-flash': 'Model A', 'agnes-3.0-flash': 'Model C' },
-    keyHint: 'Kunci di server. Tanpa input.'
+    keyHint: 'Kunci Agnes AI-mu sendiri. Kosongkan kalau mau pakai kunci server.',
+    // Allow user-provided keys; server key used as fallback when empty
+    allowUserKeys: true,
+    baseUrl: 'https://apihub.agnes-ai.com/v1'
   },
   sumopod: {
     label: 'Sumopod', tag: 'ai.sumopod.com', multiKey: true,

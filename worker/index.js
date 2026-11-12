@@ -321,10 +321,12 @@ async function handleEdit(req, env) {
     customBaseUrl = norm;
   }
 
-  // "default" provider: key is server-side (env.DEFAULT_API_KEY), no user keys.
+  // "default" provider: allow user-provided keys OR fall back to server key.
   const serverKeyMode = provider === 'default';
-  const keys = serverKeyMode ? [] : validateKeys(provider, body.keys || []);
-  if (serverKeyMode && !env.DEFAULT_API_KEY) {
+  const keys = validateKeys(provider, body.keys || []);
+  // If user provided keys, use them; otherwise use server key as fallback
+  const effectiveKeys = keys.length > 0 ? keys : (serverKeyMode ? [env.DEFAULT_API_KEY || ''] : []);
+  if (serverKeyMode && !effectiveKeys[0]) {
     throw httpError(500, 'NO_SERVER_KEY', 'Worker: DEFAULT_API_KEY belum diset. Jalankan: wrangler secret put DEFAULT_API_KEY');
   }
 
@@ -333,8 +335,9 @@ async function handleEdit(req, env) {
 
   const timeoutMs = 180_000; // 3 minutes
 
-  // Server-key mode ("default"): single credential from env, no user keys.
-  if (keys.length === 0) {
+  // Server-key mode ("default") but user may have provided their own key.
+  const useServerKey = keys.length === 0;
+  if (useServerKey) {
     const key = env.DEFAULT_API_KEY || '';
     try {
       const { text: out, usage } = await dispatch({
@@ -392,7 +395,8 @@ async function dispatch(o) {
   if (provider === 'custom' && o.customFormat === 'gemini') {
     return callGemini({ base: o.customBaseUrl, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
   }
-  const baseUrl = provider === 'custom' ? o.customBaseUrl : buildOpenAIBase(provider, {}, null);
+  // For default provider, use explicit baseUrl if provided (user's own key), else use default
+  const baseUrl = o.customBaseUrl || (provider === 'custom' ? o.customBaseUrl : buildOpenAIBase(provider, {}, null));
   return callOpenAI({ baseUrl, key: o.key, model: o.model, system: o.system, userMsg: o.userMsg, temperature: o.temperature, maxTokens: o.maxTokens, timeoutMs: o.timeoutMs });
 }
 
