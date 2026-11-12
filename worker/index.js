@@ -196,26 +196,47 @@ async function callOpenAI({ baseUrl, key, model, system, userMsg, temperature, m
   if (maxTokens) body.max_tokens = maxTokens;
   if (system) body.messages.push({ role: 'system', content: system });
   body.messages.push({ role: 'user', content: userMsg });
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const ct = res.headers.get('content-type') || '';
-  let data = null;
-  if (ct.includes('application/json')) {
-    data = await res.json().catch(() => null);
+  const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
+
+  // Agnes AI Error 1015 = Cloudflare rate-limit at their edge (429).
+  // Retry with exponential backoff: 3s → 7s → 11s (max 3 retries).
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const ct = res.headers.get('content-type') || '';
+    let data = null;
+    if (ct.includes('application/json')) {
+      data = await res.json().catch(() => null);
+    }
+    const raw = await (ct.includes('application/json') ? '' : res.text());
+
+    // 429 + "1015" = Cloudflare rate limit at Agnes edge → backoff & retry
+    if (res.status === 429 && /1015/.test((data && data.error && data.error.message) || raw || '')) {
+      if (attempt < maxRetries) {
+        const delayMs = 3000 + attempt * 4000; // 3s, 7s, 11s
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      const e = new Error('provider 429 (1015 rate limit, ' + (maxRetries + 1) + ' attempts)');
+      e.status = 429;
+      e.detail = 'Rate limit Cloudflare di sisi Agnes AI (error 1015). Semua retry habis. Tunggu 1-2 menit lalu coba lagi.';
+      throw e;
+    }
+
+    if (!res.ok) {
+      const e = new Error('provider ' + res.status);
+      e.status = res.status;
+      e.detail = (data && (data.error && data.error.message)) || (typeof raw === 'string' ? raw.slice(0, 300) : 'provider ' + res.status);
+      throw e;
+    }
+    const text = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    return { text, usage: data && data.usage ? data.usage : null };
   }
-  const raw = await (ct.includes('application/json') ? '' : res.text());
-  if (!res.ok) {
-    const e = new Error('provider ' + res.status);
-    e.status = res.status;
-    e.detail = (data && (data.error && data.error.message)) || (typeof raw === 'string' ? raw.slice(0, 300) : 'provider ' + res.status);
-    throw e;
-  }
-  const text = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-  return { text, usage: data && data.usage ? data.usage : null };
 }
 
 async function callGemini({ base, key, model, system, userMsg, temperature, maxTokens, timeoutMs }) {
