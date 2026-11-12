@@ -342,13 +342,28 @@ async function handleEdit(req, env) {
     customBaseUrl = norm;
   }
 
-  // "default" provider: allow user-provided keys OR fall back to server key.
+  // "default" provider: server key mode (no user keys needed).
+  // Other providers: require user-provided keys.
   const serverKeyMode = provider === 'default';
-  const keys = validateKeys(provider, body.keys || []);
-  // If user provided keys, use them; otherwise use server key as fallback
-  const effectiveKeys = keys.length > 0 ? keys : (serverKeyMode ? [env.DEFAULT_API_KEY || ''] : []);
-  if (serverKeyMode && !effectiveKeys[0]) {
-    throw httpError(500, 'NO_SERVER_KEY', 'Worker: DEFAULT_API_KEY belum diset. Jalankan: wrangler secret put DEFAULT_API_KEY');
+  let keys = [];
+  if (!serverKeyMode) {
+    keys = validateKeys(provider, body.keys || []);
+  } else if (Array.isArray(body.keys) && body.keys.length > 0) {
+    // Optional: allow user keys for default provider if provided
+    keys = validateKeys(provider, body.keys);
+  }
+  
+  // Resolve effective key for the request
+  let effectiveKey;
+  if (serverKeyMode && keys.length === 0) {
+    effectiveKey = env.DEFAULT_API_KEY || '';
+    if (!effectiveKey) {
+      throw httpError(500, 'NO_SERVER_KEY', 'Worker: DEFAULT_API_KEY belum diset. Jalankan: wrangler secret put DEFAULT_API_KEY');
+    }
+  } else if (keys.length > 0) {
+    effectiveKey = keys; // multi-key mode
+  } else {
+    throw httpError(400, 'NO_KEYS', 'Setiap provider butuh minimal 1 API key');
   }
 
   // build the user message
@@ -356,13 +371,11 @@ async function handleEdit(req, env) {
 
   const timeoutMs = 180_000; // 3 minutes
 
-  // Server-key mode ("default") but user may have provided their own key.
-  const useServerKey = keys.length === 0;
-  if (useServerKey) {
-    const key = env.DEFAULT_API_KEY || '';
+  // Single key mode (server key or single user key)
+  if (typeof effectiveKey === 'string') {
     try {
       const { text: out, usage } = await dispatch({
-        provider, model, key, customBaseUrl, customFormat,
+        provider, model, key: effectiveKey, customBaseUrl, customFormat,
         system, userMsg, temperature, maxTokens, timeoutMs,
       });
       return json({ ok: true, provider, model, serverKey: true, keyUsed: -1, keyCount: 0, raw: out, usage: usage || null });
@@ -370,13 +383,16 @@ async function handleEdit(req, env) {
       return err(e.status || 502, 'PROVIDER_FAILED', 'Default provider gagal: ' + String(e.detail || e.message || 'kesalahan').slice(0, 260));
     }
   }
+  
+  // Multi-key mode (user provided multiple keys)
+  const keysList = effectiveKey; // array of keys
   const strategy = (body.strategy || 'sequential').toLowerCase(); // sequential | round-robin
-  const startIdx = strategy === 'round-robin' ? (keys.length ? Math.floor(Math.random() * keys.length) : 0) : 0;
+  const startIdx = strategy === 'round-robin' ? (keysList.length ? Math.floor(Math.random() * keysList.length) : 0) : 0;
 
   const lastError = { status: 0, detail: 'no attempt' };
-  for (let i = 0; i < keys.length; i++) {
-    const idx = (startIdx + i) % keys.length;
-    const key = keys[idx];
+  for (let i = 0; i < keysList.length; i++) {
+    const idx = (startIdx + i) % keysList.length;
+    const key = keysList[idx];
     try {
       const { text: out, usage } = await dispatch({
         provider, model, key, customBaseUrl, customFormat,
@@ -385,7 +401,7 @@ async function handleEdit(req, env) {
       return json({
         ok: true,
         provider, model,
-        keyUsed: idx, keyCount: keys.length,
+        keyUsed: idx, keyCount: keysList.length,
         raw: out,
         usage: usage || null,
       });
