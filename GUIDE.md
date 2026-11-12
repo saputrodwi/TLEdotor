@@ -53,7 +53,7 @@ tl-editor/
 │  ├─ styles.css                  # tema Obsidian Slate (hand-rolled, tanpa CDN)
 │  ├─ app.js                      # logika: vault, provider, multi-key, load model, run
 │  └─ prompts/
-│     ├─ INDONESIAN_TRANSLATION_EDITOR.md   # system prompt bawaan (di-fetch saat start)
+│     ├─ EDITOR_TL_V2.md                      # system prompt bawaan (di-fetch saat start)
 │     └─ SAMPLE_CH121.txt                   # contoh naskah (tombol "Contoh Naskah")
 ├─ functions/
 │  └─ api/[[path]].js             # Pages Function: proxy /api/* ke binding TL_WORKER
