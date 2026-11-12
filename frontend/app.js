@@ -491,9 +491,17 @@ function renderHasilCards(text) {
   const pre = $('#resultHasil');
   wrap.innerHTML = '';
   if (!text) { wrap.hidden = true; pre.hidden = false; return; }
+  const lines = text.split('\n');
+  // Kalau AI output plain text tanpa tag [BALON N], tampilkan sebagai satu blok pre (bukan kartu satu-per-satu)
+  const hasAnyTag = lines.some(ln => /^\[([^\]]+)\]\s*/.test(ln));
+  if (!hasAnyTag && lines.length > 1) {
+    wrap.hidden = true;
+    pre.hidden = false;
+    pre.innerHTML = '<code>' + lines.map(ln => escapeHtml(ln) || '&nbsp;').join('\n') + '</code>';
+    return;
+  }
   pre.hidden = true;
   wrap.hidden = false;
-  const lines = text.split('\n');
   const tagRe = /^\[([^\]]+)\]\s*(.*)$/;
   const groups = [];
   let cur = null;
