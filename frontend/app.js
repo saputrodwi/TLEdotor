@@ -256,9 +256,11 @@ function renderKeyCard() {
   box.innerHTML = '';
   const p = PROVIDERS[state.provider];
   const keys = currentKeys();
-  $('#keyCount').textContent = p.serverKey ? 'server key' : keys.length + ' kunci';
+  // Default provider with allowUserKeys: show input but also support empty (server key fallback)
+  const isDefaultWithUserKeys = p.serverKey && p.allowUserKeys;
+  $('#keyCount').textContent = (!keys.length && !isDefaultWithUserKeys) ? 'server key' : keys.length + ' kunci';
 
-  if (p.serverKey) {
+  if (p.serverKey && !isDefaultWithUserKeys) {
     box.append(el('p', { class: 'note' }, 'Provider Default memakai kunci di server. Tanpa input apa pun.'));
   } else {
     box.append(el('label', { class: 'field-label', for: 'keyInput' }, 'API key — ' + p.label + (p.multiKey ? ' · pisahkan dengan koma' : '')));
@@ -290,7 +292,9 @@ async function pingAll() {
   const p = state.provider;
   const keys = currentKeys(p);
   const serverKey = PROVIDERS[p].serverKey;
-  if (!serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
+  const allowUserKeys = PROVIDERS[p].allowUserKeys;
+  // For default with allowUserKeys: proceed if either user has keys OR it's ok to use server key
+  if (!allowUserKeys && !serverKey && !keys.length) return toast('Tambahkan key dulu.', 'err');
   const out = $('#pingOut');
   out.classList.remove('hidden');
   out.innerHTML = '';
@@ -427,7 +431,9 @@ async function runEditor() {
   const text = $('#txtPaste').value;
   if (!model) return toast('Pilih model dulu.', 'err');
   const serverKey = PROVIDERS[p].serverKey;
-  if (!serverKey && !keys.length) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].label + ' key.', 'err');
+  const allowUserKeys = PROVIDERS[p].allowUserKeys;
+  // For default with allowUserKeys: allow empty keys (will use server key fallback)
+  if (!serverKey && !allowUserKeys && !keys.length) return toast('Tambahkan minimal 1 ' + PROVIDERS[p].label + ' key.', 'err');
   if (p === 'custom' && !state.custom.baseUrl) return toast('Isi Base URL custom.', 'err');
   if (!text.trim()) return toast('Sumber kosong.', 'err');
 
