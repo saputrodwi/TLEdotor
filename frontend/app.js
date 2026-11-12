@@ -493,7 +493,7 @@ function renderHasilCards(text) {
   if (!text) { wrap.hidden = true; pre.innerHTML = '<code><span class="placeholder">Hasil kosong.</span></code>'; return; }
   const lines = text.split('\n');
   // Tampilkan highlight diff di <pre> SELALU (agar user lihat baris berubah)
-  pre.innerHTML = '<code>' + lines.map(ln => escapeHtml(ln) || '&nbsp;').join('\n') + '</code>';
+  pre.innerHTML = '<code>' + highlightResult(text) + '</code>';
   // Kalau AI output pakai tag [BALON N], tampilkan juga versi kartu untuk kemudahan baca
   const hasAnyTag = lines.some(ln => /^\[([^\]]+)\]\s*/.test(ln));
   if (hasAnyTag && lines.length > 1) {
@@ -541,6 +541,7 @@ function renderHasilCards(text) {
     const card = el('div', { class: 'hasil-card' }, el('div', { class: 'hasil-body' }, el('div', { class: 'hasil-line' }, text)));
     wrap.append(card);
   }
+  } // end if hasAnyTag
 }
 function highlightResult(text) {
   const src = $('#txtPaste').value.split('\n');
@@ -628,8 +629,6 @@ function renderDiffList(container, entries, kind) {
 function renderResults(raw) {
   const { hasilText, perubSec, dicekSec } = splitSections(raw);
   window._hasilText = hasilText;
-  const pre = $('#resultHasil');
-  pre.innerHTML = '<code>' + (hasilText ? highlightResult(hasilText) : '<span class="placeholder">Hasil kosong.</span>') + '</code>';
   renderHasilCards(hasilText);
   const chg = parseDiffEntries(perubSec);
   const rev = parseDiffEntries(dicekSec);
